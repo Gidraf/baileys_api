@@ -121,11 +121,13 @@ export class SessionManager {
         sessionData.pairingCode = null
         sessionData.phone = sock.authState.creds.me?.id || phoneNumber || null
         console.log(`[${sessionId}] Connected as ${sessionData.phone}`)
+        sendWebhook('connected', { user: sock.authState.creds.me })
       } else if (connection === 'close') {
         sessionData.status = 'closed'
         const code = new Boom(lastDisconnect?.error)?.output?.statusCode
         const shouldReconnect = code !== DisconnectReason.loggedOut
         console.log(`[${sessionId}] Connection closed (${code}), reconnect=${shouldReconnect}`)
+        sendWebhook('disconnected', { statusCode: code })
         if (shouldReconnect) {
           this.sessions.delete(sessionId)
           setTimeout(() => this.createSession(sessionId, { phoneNumber, pairingCode: customCode }), 3000)
