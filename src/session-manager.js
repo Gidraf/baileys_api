@@ -131,7 +131,10 @@ export class SessionManager {
         if (shouldReconnect) {
           const storedWebhook = sessionData.webhook
           this.sessions.delete(sessionId)
-          setTimeout(() => this.createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook: storedWebhook }), 3000)
+          setTimeout(() => {
+            this.createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook: storedWebhook })
+              .catch(err => console.error(`[${sessionId}] Reconnect failed:`, err.message))
+          }, 3000)
         } else {
           // If logged out (401), we MUST delete the local credentials directory
           // so a new QR code can be generated next time.
