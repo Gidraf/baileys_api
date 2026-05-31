@@ -27,8 +27,10 @@ const sessionManager = new SessionManager()
 // ─── Health ──────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok', sessions: sessionManager.count() }))
 
+const apiRouter = express.Router()
+
 // ─── Session Management ───────────────────────────────────────────────────────
-app.post('/sessions', async (req, res) => {
+apiRouter.post('/sessions', async (req, res) => {
   try {
     const { sessionId, phoneNumber, pairingCode, webhook } = req.body
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required' })
@@ -39,17 +41,17 @@ app.post('/sessions', async (req, res) => {
   }
 })
 
-app.get('/sessions', (_req, res) => {
+apiRouter.get('/sessions', (_req, res) => {
   res.json({ sessions: sessionManager.list() })
 })
 
-app.get('/sessions/:sessionId', (req, res) => {
+apiRouter.get('/sessions/:sessionId', (req, res) => {
   const info = sessionManager.getInfo(req.params.sessionId)
   if (!info) return res.status(404).json({ error: 'Session not found' })
   res.json(info)
 })
 
-app.delete('/sessions/:sessionId', async (req, res) => {
+apiRouter.delete('/sessions/:sessionId', async (req, res) => {
   try {
     await sessionManager.removeSession(req.params.sessionId)
     res.json({ success: true })
@@ -58,20 +60,22 @@ app.delete('/sessions/:sessionId', async (req, res) => {
   }
 })
 
-app.get('/sessions/:sessionId/qr', (req, res) => {
+apiRouter.get('/sessions/:sessionId/qr', (req, res) => {
   const data = sessionManager.getQR(req.params.sessionId)
   if (!data) return res.status(404).json({ error: 'No QR or pairing code available' })
   res.json(data)
 })
 
 // ─── Mount domain routes ──────────────────────────────────────────────────────
-app.use('/sessions/:sessionId/messages',   createMessageRoutes(sessionManager))
-app.use('/sessions/:sessionId/groups',     createGroupRoutes(sessionManager))
-app.use('/sessions/:sessionId/profile',    createProfileRoutes(sessionManager, upload))
-app.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionManager, upload))
-app.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager, upload))
-app.use('/sessions/:sessionId/privacy',    createPrivacyRoutes(sessionManager))
-app.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionManager))
+apiRouter.use('/sessions/:sessionId/messages',   createMessageRoutes(sessionManager))
+apiRouter.use('/sessions/:sessionId/groups',     createGroupRoutes(sessionManager))
+apiRouter.use('/sessions/:sessionId/profile',    createProfileRoutes(sessionManager, upload))
+apiRouter.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionManager, upload))
+apiRouter.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager, upload))
+apiRouter.use('/sessions/:sessionId/privacy',    createPrivacyRoutes(sessionManager))
+apiRouter.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionManager))
+
+app.use('/api', apiRouter)
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
