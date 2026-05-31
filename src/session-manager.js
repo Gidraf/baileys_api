@@ -12,29 +12,102 @@ import path from 'path'
 import qrcode from 'qrcode'
 import { createClient } from 'redis'
 
-const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions'
-const REDIS_URL = process.env.REDIS_URL
+const SESSIONS_DIR  = process.env.SESSIONS_DIR  || './sessions'
+const REDIS_URL     = process.env.REDIS_URL     || 'redis://redis:6379'
+const INSTANCE_ID   = process.env.INSTANCE_ID   || `worker-${process.pid}`
+const LOCK_TTL_MS   = 30_000   // lock expires after 30 s if not renewed
+const LOCK_RENEW_MS = 10_000   // renew every 10 s
 
-let redisClient = null
-if (REDIS_URL) {
-  redisClient = createClient({ url: REDIS_URL })
-  redisClient.on('error', (err) => console.error('Redis Client Error', err))
-  redisClient.connect().catch(console.error)
+// ─── Redis client (gracefully disabled if unavailable) ────────────────────────
+let _redis = null
+
+async function getRedis() {
+  if (_redis?.isOpen) return _redis
+  try {
+    _redis = createClient({ url: REDIS_URL })
+    _redis.on('error', e => console.warn('[Redis] error (non-fatal):', e.message))
+    await _redis.connect()
+    console.log(`[Redis] connected (instance ${INSTANCE_ID})`)
+  } catch (e) {
+    console.warn('[Redis] unavailable – running single-worker mode:', e.message)
+    _redis = null
+  }
+  return _redis
 }
+
+// ─── Distributed lock helpers ────────────────────────────────────────────────
+
+async function acquireLock(sessionId) {
+  const rc = await getRedis()
+  if (!rc) return true  // no Redis → always proceed (single-worker)
+
+  const key = `session-lock:${sessionId}`
+  // NX = only set if key doesn't exist; PX = TTL in ms
+  const result = await rc.set(key, INSTANCE_ID, { NX: true, PX: LOCK_TTL_MS })
+  if (result === 'OK') return true
+
+  // Already exists – check if we own it (e.g. after a restart)
+  const owner = await rc.get(key)
+  return owner === INSTANCE_ID
+}
+
+async function renewLock(sessionId) {
+  const rc = await getRedis()
+  if (!rc) return
+  const owner = await rc.get(`session-lock:${sessionId}`)
+  if (owner === INSTANCE_ID) await rc.pExpire(`session-lock:${sessionId}`, LOCK_TTL_MS)
+}
+
+async function getLockOwner(sessionId) {
+  const rc = await getRedis()
+  if (!rc) return INSTANCE_ID
+  return await rc.get(`session-lock:${sessionId}`)
+}
+
+async function releaseLock(sessionId) {
+  const rc = await getRedis()
+  if (!rc) return
+  const owner = await rc.get(`session-lock:${sessionId}`)
+  if (owner === INSTANCE_ID) await rc.del(`session-lock:${sessionId}`)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export class SessionManager {
   constructor() {
-    this.sessions = new Map()   // sessionId -> { sock, store, status, qr, pairingCode }
+    this.sessions = new Map()
     fs.mkdirSync(SESSIONS_DIR, { recursive: true })
+    this._restoreExistingSessions()
   }
+
+  // ── Restore sessions that exist on disk (on startup) ──────────────────────
+  async _restoreExistingSessions() {
+    try {
+      const dirs = fs.readdirSync(SESSIONS_DIR)
+      for (const dir of dirs) {
+        const p = path.join(SESSIONS_DIR, dir)
+        if (!fs.statSync(p).isDirectory()) continue
+        // Stagger restores so workers don't all race for the same session
+        await new Promise(r => setTimeout(r, Math.floor(Math.random() * 2500)))
+        console.log(`[${dir}] Attempting auto-restore…`)
+        this.createSession(dir, {}).catch(e =>
+          console.error(`[${dir}] Auto-restore failed:`, e.message)
+        )
+      }
+    } catch (e) {
+      console.error('[SessionManager] Restore error:', e.message)
+    }
+  }
+
+  // ── Public API ────────────────────────────────────────────────────────────
 
   count() { return this.sessions.size }
 
   list() {
     return [...this.sessions.entries()].map(([id, s]) => ({
       sessionId: id,
-      status: s.status,
-      phone: s.phone || null,
+      status:    s.status,
+      phone:     s.phone || null,
     }))
   }
 
@@ -47,150 +120,237 @@ export class SessionManager {
   getQR(sessionId) {
     const s = this.sessions.get(sessionId)
     if (!s) return null
-    if (s.qrDataURL) return { type: 'qr', data: s.qrDataURL }
-    if (s.pairingCode) return { type: 'pairingCode', data: s.pairingCode }
+    if (s.qrDataURL)    return { type: 'qr',          data: s.qrDataURL }
+    if (s.pairingCode)  return { type: 'pairingCode', data: s.pairingCode }
     return null
   }
 
   getSocket(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s || s.status !== 'open') throw new Error(`Session '${sessionId}' is not connected`)
+    if (!s || s.status !== 'open')
+      throw new Error(`Session '${sessionId}' is not connected (status: ${s?.status})`)
     return s.sock
   }
 
+  // ── Create / connect a session ─────────────────────────────────────────────
+
   async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
+    // Already running in this worker
     if (this.sessions.has(sessionId)) {
-      return { sessionId, status: this.sessions.get(sessionId).status }
+      const existing = this.sessions.get(sessionId)
+      if (webhook) existing.webhook = webhook  // update webhook URL if changed
+      return { sessionId, status: existing.status }
     }
 
-    if (redisClient) {
-      const lockKey = `session_lock:${sessionId}`
-      const instanceId = process.env.INSTANCE_ID || 'local'
-      
-      const acquired = await redisClient.set(lockKey, instanceId, { NX: true, EX: 60 })
-      if (!acquired) {
-        const owner = await redisClient.get(lockKey)
-        if (owner && owner !== instanceId) {
-          console.log(`[${sessionId}] Skipping init, session is locked by worker ${owner}.`)
-          return { sessionId, status: 'locked', owner }
-        }
-      }
-      
-      // Keep renewing the lock every 30 seconds
-      const renewInterval = setInterval(async () => {
-        if (this.sessions.has(sessionId)) {
-          await redisClient.set(lockKey, instanceId, { EX: 60 })
-        } else {
-          clearInterval(renewInterval)
-          await redisClient.del(lockKey)
-        }
-      }, 30000)
+    // ── Distributed lock ────────────────────────────────────────────────────
+    const owned = await acquireLock(sessionId)
+    if (!owned) {
+      const owner = await getLockOwner(sessionId)
+      console.log(`[${sessionId}] Already owned by ${owner} – skipping`)
+      return { sessionId, status: 'owned_elsewhere' }
     }
 
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
     fs.mkdirSync(sessionDir, { recursive: true })
 
-    const sessionData = { status: 'connecting', sock: null, store: null, qrDataURL: null, pairingCode: null, phone: phoneNumber || null, webhook: webhook || null }
+    const sessionData = {
+      status:       'connecting',
+      sock:         null,
+      store:        null,
+      qrDataURL:    null,
+      pairingCode:  null,
+      phone:        phoneNumber || null,
+      webhook:      webhook || null,
+      lockRenewer:  null,
+      retries440:   0,
+      retries:      0,
+    }
     this.sessions.set(sessionId, sessionData)
 
+    // Keep the lock alive
+    sessionData.lockRenewer = setInterval(() => renewLock(sessionId), LOCK_RENEW_MS)
+
+    // ── Webhook helper ──────────────────────────────────────────────────────
     const sendWebhook = (event, data) => {
-      if (sessionData.webhook) {
-        fetch(sessionData.webhook, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionId, event, data, timestamp: Date.now() })
-        }).catch(err => console.error(`[${sessionId}] Webhook error for ${event}:`, err.message))
+      const url = sessionData.webhook
+      if (!url) return
+      fetch(url, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sessionId, event, data, timestamp: Date.now() }),
+      }).catch(err => console.error(`[${sessionId}] Webhook error (${event}):`, err.message))
+    }
+
+    // ── Internal connect function (called on reconnects too) ────────────────
+    const doConnect = async () => {
+      try {
+        const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
+
+        const sock = makeWASocket({
+          logger,
+          auth:               state,
+          printQRInTerminal:  false,
+          browser:            ['Ubuntu', 'Chrome', '20.0.04'],
+        })
+
+        const store = makeInMemoryStore({ logger, socket: sock })
+        store.bind(sock.ev)
+
+        sessionData.sock  = sock
+        sessionData.store = store
+
+        sock.ev.on('creds.update', saveCreds)
+
+        // ── Forward ALL Baileys events to webhook ──────────────────────────
+        // We do this via ev.process so we get everything, but we ALSO
+        // handle connection.update separately below to convert QR to dataURL.
+        sock.ev.process(async (events) => {
+          for (const [event, data] of Object.entries(events)) {
+            // Skip connection.update – handled explicitly below to convert QR
+            if (event !== 'connection.update') {
+              sendWebhook(event, data)
+            }
+          }
+        })
+
+        // ── Connection lifecycle ───────────────────────────────────────────
+        sock.ev.on('connection.update', async (update) => {
+          const { connection, lastDisconnect, qr } = update
+
+          // ── QR code ─────────────────────────────────────────────────────
+          if (qr) {
+            try {
+              // Convert to PNG dataURL so the frontend can display it directly
+              sessionData.qrDataURL   = await qrcode.toDataURL(qr)
+              sessionData.pairingCode = null
+            } catch {
+              sessionData.qrDataURL = qr  // fall back to raw string
+            }
+            // Send the converted dataURL version
+            sendWebhook('qr', { qr: sessionData.qrDataURL })
+          }
+
+          if (connection === 'connecting') {
+            sessionData.status = 'connecting'
+            sendWebhook('connection.update', { connection: 'connecting' })
+
+            // Request pairing code if a phone number was provided
+            if (phoneNumber && !sock.authState.creds.registered) {
+              try {
+                await delay(1500)
+                const code              = await sock.requestPairingCode(phoneNumber, customCode)
+                sessionData.pairingCode = code
+                sessionData.qrDataURL   = null
+                sendWebhook('pairing_code', { code })
+                console.log(`[${sessionId}] Pairing code: ${code}`)
+              } catch (e) {
+                console.error(`[${sessionId}] Pairing code request failed:`, e.message)
+              }
+            }
+
+          } else if (connection === 'open') {
+            sessionData.status      = 'open'
+            sessionData.qrDataURL   = null
+            sessionData.pairingCode = null
+            sessionData.retries440  = 0
+            sessionData.retries     = 0
+            sessionData.phone       = sock.authState.creds.me?.id || phoneNumber || null
+            console.log(`[${sessionId}] ✅ Connected as ${sessionData.phone}`)
+            sendWebhook('connected', { user: sock.authState.creds.me })
+
+          } else if (connection === 'close') {
+            const code       = new Boom(lastDisconnect?.error)?.output?.statusCode
+            const isLoggedOut = code === DisconnectReason.loggedOut  // 401
+            const isConflict  = code === 440
+
+            console.log(`[${sessionId}] Connection closed (code=${code})`)
+            sessionData.status = 'closed'
+
+            // ── Permanent logout ──────────────────────────────────────────
+            if (isLoggedOut) {
+              sendWebhook('disconnected', { statusCode: code, reason: 'loggedOut' })
+              this._cleanup(sessionId)
+              // Delete auth state so a fresh QR can be issued next time
+              try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+              return
+            }
+
+            // ── Conflict (440) – another socket connected with same creds ─
+            if (isConflict) {
+              // Check whether we still own the Redis lock.
+              // If we don't, another worker has taken over – shut down gracefully.
+              const owner = await getLockOwner(sessionId)
+              if (owner !== INSTANCE_ID) {
+                console.log(`[${sessionId}] Lock moved to ${owner} – shutting down this copy`)
+                this._cleanup(sessionId)
+                return
+              }
+
+              sessionData.retries440++
+              if (sessionData.retries440 > 5) {
+                console.error(`[${sessionId}] Too many 440 conflicts – giving up`)
+                sendWebhook('disconnected', { statusCode: code, reason: 'conflict_loop' })
+                this._cleanup(sessionId)
+                return
+              }
+
+              // Exponential back-off: 2s, 4s, 8s, 16s, 32s
+              const waitMs = Math.min(1000 * Math.pow(2, sessionData.retries440), 32_000)
+              console.log(`[${sessionId}] 440 conflict #${sessionData.retries440} – retry in ${waitMs}ms`)
+              await delay(waitMs)
+
+              // Tear down current socket before reconnecting
+              try { sock.end() } catch {}
+              await doConnect()
+              return
+            }
+
+            // ── Normal / transient disconnect – reconnect ──────────────────
+            sendWebhook('disconnected', { statusCode: code })
+            sessionData.retries++
+            if (sessionData.retries > 8) {
+              console.error(`[${sessionId}] Too many reconnect attempts – giving up`)
+              this._cleanup(sessionId)
+              return
+            }
+            const waitMs = Math.min(3000 * sessionData.retries, 30_000)
+            console.log(`[${sessionId}] Reconnecting in ${waitMs}ms (attempt ${sessionData.retries})`)
+            await delay(waitMs)
+            await doConnect()
+          }
+        })
+
+      } catch (err) {
+        console.error(`[${sessionId}] doConnect error:`, err.message)
+        sessionData.status = 'error'
+        sendWebhook('error', { message: err.message })
       }
     }
 
-    const logger = pino({ level: process.env.LOG_LEVEL || 'silent' })
-    const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
-
-    const sock = makeWASocket({ logger, auth: state, printQRInTerminal: false, browser: ['Ubuntu', 'Chrome', '20.0.04'] })
-
-    const store = makeInMemoryStore({ logger, socket: sock })
-    store.bind(sock.ev)
-
-    sessionData.sock = sock
-    sessionData.store = store
-
-    sock.ev.on('creds.update', saveCreds)
-
-    sock.ev.process(async (events) => {
-      for (const [event, data] of Object.entries(events)) {
-        sendWebhook(event, data)
-      }
-    })
-
-    sock.ev.on('connection.update', async (update) => {
-      const { connection, lastDisconnect, qr } = update
-
-      if (qr) {
-        try {
-          sessionData.qrDataURL = await qrcode.toDataURL(qr)
-          sessionData.pairingCode = null
-          sendWebhook('qr', { qr: sessionData.qrDataURL })
-        } catch { sessionData.qrDataURL = qr }
-      }
-
-      if (connection === 'connecting') {
-        sessionData.status = 'connecting'
-        // Request pairing code if phone number provided and not yet registered
-        if (phoneNumber && !sock.authState.creds.registered) {
-          try {
-            await delay(1500)
-            const code = await sock.requestPairingCode(phoneNumber, customCode)
-            sessionData.pairingCode = code
-            sessionData.qrDataURL = null
-            sendWebhook('pairing_code', { code })
-            console.log(`[${sessionId}] Pairing code: ${code}`)
-          } catch (e) {
-            console.error(`[${sessionId}] Failed to request pairing code:`, e.message)
-          }
-        }
-      } else if (connection === 'open') {
-        sessionData.status = 'open'
-        sessionData.qrDataURL = null
-        sessionData.pairingCode = null
-        sessionData.phone = sock.authState.creds.me?.id || phoneNumber || null
-        console.log(`[${sessionId}] Connected as ${sessionData.phone}`)
-        sendWebhook('connected', { user: sock.authState.creds.me })
-      } else if (connection === 'close') {
-        sessionData.status = 'closed'
-        const code = new Boom(lastDisconnect?.error)?.output?.statusCode
-        const shouldReconnect = code !== DisconnectReason.loggedOut
-        console.log(`[${sessionId}] Connection closed (${code}), reconnect=${shouldReconnect}`)
-        sendWebhook('disconnected', { statusCode: code })
-        if (shouldReconnect) {
-          const storedWebhook = sessionData.webhook
-          this.sessions.delete(sessionId)
-          setTimeout(() => {
-            this.createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook: storedWebhook })
-              .catch(err => console.error(`[${sessionId}] Reconnect failed:`, err.message))
-          }, 3000)
-        } else {
-          // If logged out (401), we MUST delete the local credentials directory
-          // so a new QR code can be generated next time.
-          try {
-            const dir = path.join(SESSIONS_DIR, sessionId)
-            fs.rmSync(dir, { recursive: true, force: true })
-            console.log(`[${sessionId}] Deleted corrupted/logged-out session data from disk.`)
-          } catch (e) {}
-          this.sessions.delete(sessionId)
-        }
-      }
-    })
-
+    await doConnect()
     return { sessionId, status: 'connecting' }
   }
 
+  // ── Internal cleanup ───────────────────────────────────────────────────────
+
+  _cleanup(sessionId) {
+    const s = this.sessions.get(sessionId)
+    if (!s) return
+    if (s.lockRenewer) clearInterval(s.lockRenewer)
+    if (s.sock) { try { s.sock.end() } catch {} }
+    releaseLock(sessionId)
+    this.sessions.delete(sessionId)
+  }
+
+  // ── Public removal ─────────────────────────────────────────────────────────
+
   async removeSession(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (s?.sock) {
-      try { await s.sock.logout() } catch {}
-    }
-    this.sessions.delete(sessionId)
+    if (!s) return
+    if (s.sock) { try { await s.sock.logout() } catch {} }
+    this._cleanup(sessionId)
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
-    fs.rmSync(sessionDir, { recursive: true, force: true })
+    try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
   }
 }

@@ -54,7 +54,7 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       # Each container gets a unique INSTANCE_ID via the replica index
       INSTANCE_ID: "{{.Task.Slot}}"
-      REDIS_URL: redis://baileys-redis:6379
+      REDIS_URL: redis://redis:6379
 
     depends_on:
       - redis

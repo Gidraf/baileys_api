@@ -11,8 +11,15 @@ import pino from 'pino'
 import path from 'path'
 import fs from 'fs'
 import { logger } from './utils/logger.js'
+import { createClient } from 'redis'
 
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions'
+const REDIS_URL = process.env.REDIS_URL || 'redis://redis:6379'
+const INSTANCE_ID = process.env.INSTANCE_ID || Math.random().toString(36).substring(2, 8)
+
+const redisClient = createClient({ url: REDIS_URL })
+redisClient.on('error', (err) => logger.error('Redis Client Error', err))
+redisClient.connect().catch(err => logger.error('Redis Connect Error', err))
 
 export class SessionManager {
   constructor(wss) {
@@ -57,6 +64,15 @@ export class SessionManager {
       return { exists: true, status: this.sessions.get(sessionId).status }
     }
 
+    const lockKey = `session_lock:${sessionId}`
+    if (redisClient.isOpen) {
+      const acquired = await redisClient.set(lockKey, INSTANCE_ID, { NX: true, EX: 30 })
+      if (!acquired && (await redisClient.get(lockKey)) !== INSTANCE_ID) {
+        logger.info(`Session ${sessionId} is locked by another worker`)
+        return { exists: true, status: 'locked', lockedByOther: true }
+      }
+    }
+
     const sessionPath = path.join(SESSIONS_DIR, sessionId)
     if (!fs.existsSync(sessionPath)) {
       fs.mkdirSync(sessionPath, { recursive: true })
@@ -69,7 +85,13 @@ export class SessionManager {
       qr: null,
       pairingCode: null,
       phoneNumber,
-      retries: 0
+      retries: 0,
+      lockInterval: redisClient.isOpen ? setInterval(async () => {
+        try {
+          const owner = await redisClient.get(lockKey)
+          if (owner === INSTANCE_ID) await redisClient.expire(lockKey, 30)
+        } catch (err) {}
+      }, 15000) : null
     }
     this.sessions.set(sessionId, sessionData)
 
@@ -185,6 +207,15 @@ export class SessionManager {
 
   _cleanup(sessionId) {
     const sessionData = this.sessions.get(sessionId)
+    if (sessionData?.lockInterval) {
+      clearInterval(sessionData.lockInterval)
+    }
+    if (redisClient.isOpen) {
+      redisClient.get(`session_lock:${sessionId}`).then(owner => {
+        if (owner === INSTANCE_ID) redisClient.del(`session_lock:${sessionId}`)
+      }).catch(() => {})
+    }
+
     if (sessionData?.sock) {
       try { sessionData.sock.end() } catch (_) {}
     }
