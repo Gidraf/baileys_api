@@ -10,8 +10,17 @@ import pino from 'pino'
 import fs from 'fs'
 import path from 'path'
 import qrcode from 'qrcode'
+import { createClient } from 'redis'
 
 const SESSIONS_DIR = process.env.SESSIONS_DIR || './sessions'
+const REDIS_URL = process.env.REDIS_URL
+
+let redisClient = null
+if (REDIS_URL) {
+  redisClient = createClient({ url: REDIS_URL })
+  redisClient.on('error', (err) => console.error('Redis Client Error', err))
+  redisClient.connect().catch(console.error)
+}
 
 export class SessionManager {
   constructor() {
@@ -52,6 +61,30 @@ export class SessionManager {
   async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
     if (this.sessions.has(sessionId)) {
       return { sessionId, status: this.sessions.get(sessionId).status }
+    }
+
+    if (redisClient) {
+      const lockKey = `session_lock:${sessionId}`
+      const instanceId = process.env.INSTANCE_ID || 'local'
+      
+      const acquired = await redisClient.set(lockKey, instanceId, { NX: true, EX: 60 })
+      if (!acquired) {
+        const owner = await redisClient.get(lockKey)
+        if (owner && owner !== instanceId) {
+          console.log(`[${sessionId}] Skipping init, session is locked by worker ${owner}.`)
+          return { sessionId, status: 'locked', owner }
+        }
+      }
+      
+      // Keep renewing the lock every 30 seconds
+      const renewInterval = setInterval(async () => {
+        if (this.sessions.has(sessionId)) {
+          await redisClient.set(lockKey, instanceId, { EX: 60 })
+        } else {
+          clearInterval(renewInterval)
+          await redisClient.del(lockKey)
+        }
+      }, 30000)
     }
 
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
