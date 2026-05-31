@@ -135,10 +135,16 @@ export class SessionManager {
   // ── Create / connect a session ─────────────────────────────────────────────
 
   async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
+    const sessionDir = path.join(SESSIONS_DIR, sessionId)
+    const webhookFile = path.join(SESSIONS_DIR, sessionId, 'webhook.txt')
+
     // Already running in this worker
     if (this.sessions.has(sessionId)) {
       const existing = this.sessions.get(sessionId)
-      if (webhook) existing.webhook = webhook  // update webhook URL if changed
+      if (webhook) {
+        existing.webhook = webhook  // update webhook URL if changed
+        try { fs.writeFileSync(webhookFile, webhook) } catch (e) {}
+      }
       return { sessionId, status: existing.status }
     }
 
@@ -150,8 +156,18 @@ export class SessionManager {
       return { sessionId, status: 'owned_elsewhere' }
     }
 
-    const sessionDir = path.join(SESSIONS_DIR, sessionId)
     fs.mkdirSync(sessionDir, { recursive: true })
+
+    let finalWebhook = webhook || null
+    try {
+      if (!webhook && fs.existsSync(webhookFile)) {
+        finalWebhook = fs.readFileSync(webhookFile, 'utf8').trim()
+      } else if (webhook) {
+        fs.writeFileSync(webhookFile, webhook)
+      }
+    } catch (e) {
+      console.warn(`[${sessionId}] Failed to read/write webhook file:`, e.message)
+    }
 
     const sessionData = {
       status:       'connecting',
@@ -160,7 +176,7 @@ export class SessionManager {
       qrDataURL:    null,
       pairingCode:  null,
       phone:        phoneNumber || null,
-      webhook:      webhook || null,
+      webhook:      finalWebhook,
       lockRenewer:  null,
       retries440:   0,
       retries:      0,
