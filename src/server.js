@@ -30,9 +30,9 @@ app.get('/health', (_req, res) => res.json({ status: 'ok', sessions: sessionMana
 // ─── Session Management ───────────────────────────────────────────────────────
 app.post('/sessions', async (req, res) => {
   try {
-    const { sessionId, phoneNumber, pairingCode } = req.body
+    const { sessionId, phoneNumber, pairingCode, webhook } = req.body
     if (!sessionId) return res.status(400).json({ error: 'sessionId is required' })
-    const result = await sessionManager.createSession(sessionId, { phoneNumber, pairingCode })
+    const result = await sessionManager.createSession(sessionId, { phoneNumber, pairingCode, webhook })
     res.json(result)
   } catch (err) {
     res.status(500).json({ error: err.message })

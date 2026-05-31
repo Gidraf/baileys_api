@@ -49,7 +49,7 @@ export class SessionManager {
     return s.sock
   }
 
-  async createSession(sessionId, { phoneNumber, pairingCode: customCode } = {}) {
+  async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
     if (this.sessions.has(sessionId)) {
       return { sessionId, status: this.sessions.get(sessionId).status }
     }
@@ -57,8 +57,18 @@ export class SessionManager {
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
     fs.mkdirSync(sessionDir, { recursive: true })
 
-    const sessionData = { status: 'connecting', sock: null, store: null, qrDataURL: null, pairingCode: null, phone: phoneNumber || null }
+    const sessionData = { status: 'connecting', sock: null, store: null, qrDataURL: null, pairingCode: null, phone: phoneNumber || null, webhook: webhook || null }
     this.sessions.set(sessionId, sessionData)
+
+    const sendWebhook = (event, data) => {
+      if (sessionData.webhook) {
+        fetch(sessionData.webhook, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId, event, data, timestamp: Date.now() })
+        }).catch(err => console.error(`[${sessionId}] Webhook error for ${event}:`, err.message))
+      }
+    }
 
     const logger = pino({ level: process.env.LOG_LEVEL || 'silent' })
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
@@ -73,6 +83,12 @@ export class SessionManager {
 
     sock.ev.on('creds.update', saveCreds)
 
+    sock.ev.process(async (events) => {
+      for (const [event, data] of Object.entries(events)) {
+        sendWebhook(event, data)
+      }
+    })
+
     sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update
 
@@ -80,6 +96,7 @@ export class SessionManager {
         try {
           sessionData.qrDataURL = await qrcode.toDataURL(qr)
           sessionData.pairingCode = null
+          sendWebhook('qr', { qr: sessionData.qrDataURL })
         } catch { sessionData.qrDataURL = qr }
       }
 
@@ -92,6 +109,7 @@ export class SessionManager {
             const code = await sock.requestPairingCode(phoneNumber, customCode)
             sessionData.pairingCode = code
             sessionData.qrDataURL = null
+            sendWebhook('pairing_code', { code })
             console.log(`[${sessionId}] Pairing code: ${code}`)
           } catch (e) {
             console.error(`[${sessionId}] Failed to request pairing code:`, e.message)
