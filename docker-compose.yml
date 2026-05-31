@@ -1,0 +1,113 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Baileys WhatsApp API — Auto-scaling Docker Compose
+#
+#  Scale workers:
+#    docker compose up --scale baileys-worker=3 -d
+#
+#  Or use the helper script:
+#    ./scripts/scale.sh 5
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Nginx reverse proxy / load balancer ──────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: baileys-nginx
+    restart: unless-stopped
+    ports:
+      - "${EXPOSE_PORT:-21465}:21465"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/upstream.conf:/etc/nginx/conf.d/upstream.conf:ro
+    depends_on:
+      - baileys-worker
+    networks:
+      - baileys-net
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ── Baileys API worker (scalable) ─────────────────────────────────────────
+  baileys-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: baileys-api:latest
+    restart: unless-stopped
+
+    # Sessions are stored on a shared named volume so all workers
+    # can access any session's auth files. Each worker loads the
+    # sessions that exist on startup; new sessions are created on
+    # whichever worker handles the request.
+    volumes:
+      - sessions-data:/app/sessions
+
+    environment:
+      NODE_ENV: production
+      PORT: 21465
+      SESSIONS_DIR: /app/sessions
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Each container gets a unique INSTANCE_ID via the replica index
+      INSTANCE_ID: "{{.Task.Slot}}"
+
+    networks:
+      - baileys-net
+
+    # Resource limits — tune to your server capacity
+    deploy:
+      replicas: ${INITIAL_REPLICAS:-2}
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      update_config:
+        parallelism: 1
+        delay: 10s
+        order: start-first
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:21465/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+
+  # ── Redis (optional — for shared state / pub-sub between workers) ─────────
+  redis:
+    image: redis:7-alpine
+    container_name: baileys-redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redis-data:/data
+    networks:
+      - baileys-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  sessions-data:
+    driver: local
+  redis-data:
+    driver: local
+
+# ── Network ───────────────────────────────────────────────────────────────────
+networks:
+  baileys-net:
+    driver: bridge

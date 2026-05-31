@@ -1,0 +1,86 @@
+import express from 'express'
+import { json } from 'express'
+import multer from 'multer'
+import { SessionManager } from './session-manager.js'
+import { createMessageRoutes } from './routes/messages.js'
+import { createGroupRoutes } from './routes/groups.js'
+import { createProfileRoutes } from './routes/profile.js'
+import { createNewsletterRoutes } from './routes/newsletters.js'
+import { createBusinessRoutes } from './routes/business.js'
+import { createPrivacyRoutes } from './routes/privacy.js'
+import { createCommunityRoutes } from './routes/community.js'
+
+const app = express()
+const PORT = process.env.PORT || 21465
+const upload = multer({ storage: multer.memoryStorage() })
+
+app.use(json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+
+app.use((req, _res, next) => {
+  req.upload = upload
+  next()
+})
+
+const sessionManager = new SessionManager()
+
+// ─── Health ──────────────────────────────────────────────────────────────────
+app.get('/health', (_req, res) => res.json({ status: 'ok', sessions: sessionManager.count() }))
+
+// ─── Session Management ───────────────────────────────────────────────────────
+app.post('/sessions', async (req, res) => {
+  try {
+    const { sessionId, phoneNumber, pairingCode } = req.body
+    if (!sessionId) return res.status(400).json({ error: 'sessionId is required' })
+    const result = await sessionManager.createSession(sessionId, { phoneNumber, pairingCode })
+    res.json(result)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/sessions', (_req, res) => {
+  res.json({ sessions: sessionManager.list() })
+})
+
+app.get('/sessions/:sessionId', (req, res) => {
+  const info = sessionManager.getInfo(req.params.sessionId)
+  if (!info) return res.status(404).json({ error: 'Session not found' })
+  res.json(info)
+})
+
+app.delete('/sessions/:sessionId', async (req, res) => {
+  try {
+    await sessionManager.removeSession(req.params.sessionId)
+    res.json({ success: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.get('/sessions/:sessionId/qr', (req, res) => {
+  const data = sessionManager.getQR(req.params.sessionId)
+  if (!data) return res.status(404).json({ error: 'No QR or pairing code available' })
+  res.json(data)
+})
+
+// ─── Mount domain routes ──────────────────────────────────────────────────────
+app.use('/sessions/:sessionId/messages',   createMessageRoutes(sessionManager))
+app.use('/sessions/:sessionId/groups',     createGroupRoutes(sessionManager))
+app.use('/sessions/:sessionId/profile',    createProfileRoutes(sessionManager))
+app.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionManager))
+app.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager))
+app.use('/sessions/:sessionId/privacy',    createPrivacyRoutes(sessionManager))
+app.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionManager))
+
+// ─── Global error handler ─────────────────────────────────────────────────────
+app.use((err, _req, res, _next) => {
+  console.error(err)
+  res.status(500).json({ error: err.message || 'Internal server error' })
+})
+
+app.listen(PORT, () => {
+  console.log(`🚀 Baileys API server running on port ${PORT}`)
+})
+
+export default app
