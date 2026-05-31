@@ -73,7 +73,7 @@ export class SessionManager {
     const logger = pino({ level: process.env.LOG_LEVEL || 'silent' })
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
 
-    const sock = makeWASocket({ logger, auth: state, printQRInTerminal: false })
+    const sock = makeWASocket({ logger, auth: state, printQRInTerminal: false, browser: ['Ubuntu', 'Chrome', '20.0.04'] })
 
     const store = makeInMemoryStore({ logger, socket: sock })
     store.bind(sock.ev)
@@ -132,6 +132,13 @@ export class SessionManager {
           this.sessions.delete(sessionId)
           setTimeout(() => this.createSession(sessionId, { phoneNumber, pairingCode: customCode }), 3000)
         } else {
+          // If logged out (401), we MUST delete the local credentials directory
+          // so a new QR code can be generated next time.
+          try {
+            const dir = path.join(SESSIONS_DIR, sessionId)
+            fs.rmSync(dir, { recursive: true, force: true })
+            console.log(`[${sessionId}] Deleted corrupted/logged-out session data from disk.`)
+          } catch (e) {}
           this.sessions.delete(sessionId)
         }
       }
