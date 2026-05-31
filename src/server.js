@@ -67,9 +67,9 @@ app.get('/sessions/:sessionId/qr', (req, res) => {
 // ─── Mount domain routes ──────────────────────────────────────────────────────
 app.use('/sessions/:sessionId/messages',   createMessageRoutes(sessionManager))
 app.use('/sessions/:sessionId/groups',     createGroupRoutes(sessionManager))
-app.use('/sessions/:sessionId/profile',    createProfileRoutes(sessionManager))
-app.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionManager))
-app.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager))
+app.use('/sessions/:sessionId/profile',    createProfileRoutes(sessionManager, upload))
+app.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionManager, upload))
+app.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager, upload))
 app.use('/sessions/:sessionId/privacy',    createPrivacyRoutes(sessionManager))
 app.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionManager))
 
