@@ -128,8 +128,8 @@ export class SessionManager {
   getSocket(sessionId) {
     const s = this.sessions.get(sessionId)
     if (!s) throw new Error(`Session '${sessionId}' not found`)
-    if (s.status !== 'open' && s.status !== 'connecting')
-      throw new Error(`Session '${sessionId}' is not connected (status: ${s?.status})`)
+    if (s.status !== 'open')
+      throw new Error(`Session '${sessionId}' is not connected (status: ${s?.status}). Please try again when it is 'open'.`)
     if (!s.sock)
       throw new Error(`Session '${sessionId}' is initializing (no socket yet)`)
     return s.sock
