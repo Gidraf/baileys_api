@@ -195,6 +195,8 @@ export class SessionManager {
       lockRenewer:  null,
       retries440:   0,
       retries:      0,
+      webhookQueue: [],
+      webhookProcessing: false,
     }
     this.sessions.set(sessionId, sessionData)
 
@@ -202,18 +204,31 @@ export class SessionManager {
     sessionData.lockRenewer = setInterval(() => renewLock(sessionId), LOCK_RENEW_MS)
 
     // ── Webhook helper ──────────────────────────────────────────────────────
-    const sendWebhook = async (event, data) => {
-      const url = sessionData.webhook
-      if (!url) return
-      try {
-        await fetch(url, {
-          method:  'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ sessionId, event, data, timestamp: Date.now() }),
-        })
-      } catch (err) {
-        console.error(`[${sessionId}] Webhook error (${event}):`, err.message)
+    const sendWebhook = (event, data) => {
+      sessionData.webhookQueue.push({ event, data })
+      processWebhookQueue()
+    }
+
+    const processWebhookQueue = async () => {
+      if (sessionData.webhookProcessing) return
+      sessionData.webhookProcessing = true
+
+      while (sessionData.webhookQueue.length > 0) {
+        const { event, data } = sessionData.webhookQueue.shift()
+        const url = sessionData.webhook
+        if (url) {
+          try {
+            await fetch(url, {
+              method:  'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body:    JSON.stringify({ sessionId, event, data, timestamp: Date.now() }),
+            })
+          } catch (err) {
+            console.error(`[${sessionId}] Webhook error (${event}):`, err.message)
+          }
+        }
       }
+      sessionData.webhookProcessing = false
     }
 
     // ── Internal connect function (called on reconnects too) ────────────────
@@ -266,17 +281,17 @@ export class SessionManager {
         // ── Forward ALL Baileys events to webhook ──────────────────────────
         // We do this via ev.process so we get everything, but we ALSO
         // handle connection.update separately below to convert QR to dataURL.
-        sock.ev.process(async (events) => {
+        sock.ev.process((events) => {
           for (const [event, data] of Object.entries(events)) {
             if (event === 'connection.update') continue;
 
             if (event === 'messages.upsert' && data.messages && Array.isArray(data.messages)) {
-              // Send messages one by one so the backend can process them sequentially
+              // Queue messages one by one so the backend can process them sequentially
               for (const msg of data.messages) {
-                await sendWebhook('messages.upsert', { ...data, messages: [msg] })
+                sendWebhook('messages.upsert', { ...data, messages: [msg] })
               }
             } else {
-              await sendWebhook(event, data)
+              sendWebhook(event, data)
             }
           }
         })
