@@ -127,8 +127,11 @@ export class SessionManager {
 
   getSocket(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s || s.status !== 'open')
+    if (!s) throw new Error(`Session '${sessionId}' not found`)
+    if (s.status !== 'open' && s.status !== 'connecting')
       throw new Error(`Session '${sessionId}' is not connected (status: ${s?.status})`)
+    if (!s.sock)
+      throw new Error(`Session '${sessionId}' is initializing (no socket yet)`)
     return s.sock
   }
 
@@ -211,6 +214,7 @@ export class SessionManager {
     // ── Internal connect function (called on reconnects too) ────────────────
     const doConnect = async () => {
       try {
+        sessionData.status = 'connecting'
         const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
 
