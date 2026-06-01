@@ -238,7 +238,23 @@ export class SessionManager {
           }
         })
 
+        const storePath = path.join(sessionDir, 'baileys_store_multi.json')
         const store = makeInMemoryStore({ logger, socket: sock })
+        try {
+            store.readFromFile(storePath)
+        } catch (e) {
+            console.error(`[${sessionId}] Failed to read store:`, e.message)
+        }
+        
+        // Write to file periodically to persist messages without memory leaks
+        sessionData.storeInterval = setInterval(() => {
+          try {
+             store.writeToFile(storePath)
+          } catch (e) {
+             console.error(`[${sessionId}] Failed to write store:`, e.message)
+          }
+        }, 10_000)
+
         store.bind(sock.ev)
 
         sessionData.sock  = sock

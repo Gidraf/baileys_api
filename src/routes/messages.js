@@ -8,6 +8,28 @@ export function createMessageRoutes(sm) {
   const router = Router({ mergeParams: true })
 
   function sock(req) { return sm.getSocket(req.params.sessionId) }
+  function store(req) { return sm.getStore(req.params.sessionId) }
+
+  // ── Fetch Messages ──────────────────────────────────────────────────────────
+  router.get('/:jid', (req, res) => {
+    try {
+      const jid = req.params.jid
+      const st = store(req)
+      const messages = st.messages[jid] ? st.messages[jid].array : []
+      res.json({ jid, messages })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Status / Story ──────────────────────────────────────────────────────────
+  router.post('/status/text', async (req, res) => {
+    try {
+      const { text, backgroundColor = '#000000', font = 1 } = req.body
+      const msg = { text }
+      const opts = { backgroundColor, font }
+      const result = await sock(req).sendMessage('status@broadcast', msg, opts)
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
 
   // ── Text ────────────────────────────────────────────────────────────────────
   /**
