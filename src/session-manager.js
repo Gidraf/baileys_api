@@ -246,6 +246,7 @@ export class SessionManager {
             console.error(`[${sessionId}] Failed to read store:`, e.message)
         }
         
+        if (sessionData.storeInterval) clearInterval(sessionData.storeInterval)
         // Write to file periodically to persist messages without memory leaks
         sessionData.storeInterval = setInterval(() => {
           try {
@@ -282,6 +283,9 @@ export class SessionManager {
 
         // ── Connection lifecycle ───────────────────────────────────────────
         sock.ev.on('connection.update', async (update) => {
+          if (sessionData.sock && sessionData.sock !== sock) {
+            return // Ignore events from old sockets to prevent loops
+          }
           const { connection, lastDisconnect, qr } = update
 
           // ── QR code ─────────────────────────────────────────────────────
