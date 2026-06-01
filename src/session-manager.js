@@ -135,6 +135,11 @@ export class SessionManager {
     return s.sock
   }
 
+  // Alias for backward compatibility with route files
+  getSessionSock(sessionId) {
+    return this.getSocket(sessionId)
+  }
+
   getStore(sessionId) {
     const s = this.sessions.get(sessionId)
     if (!s || !s.store)
