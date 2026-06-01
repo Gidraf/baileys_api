@@ -1,12 +1,12 @@
 import { Router } from 'express'
 
 export function createGroupRoutes(sessionManager) {
-  const router = Router()
+  const router = Router({ mergeParams: true })
 
   const getSock = (req) => sessionManager.getSessionSock(req.params.sessionId)
 
   // Create group
-  router.post('/:sessionId', async (req, res, next) => {
+  router.post('/', async (req, res, next) => {
     try {
       const { name, participants } = req.body
       const result = await getSock(req).groupCreate(name, participants)
@@ -15,7 +15,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Get group metadata
-  router.get('/:sessionId/:jid', async (req, res, next) => {
+  router.get('/:jid', async (req, res, next) => {
     try {
       const result = await getSock(req).groupMetadata(req.params.jid)
       res.json(result)
@@ -23,7 +23,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Get all groups
-  router.get('/:sessionId', async (req, res, next) => {
+  router.get('/', async (req, res, next) => {
     try {
       const result = await getSock(req).groupFetchAllParticipating()
       res.json(result)
@@ -31,7 +31,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Get invite code
-  router.get('/:sessionId/:jid/invite-code', async (req, res, next) => {
+  router.get('/:jid/invite-code', async (req, res, next) => {
     try {
       const code = await getSock(req).groupInviteCode(req.params.jid)
       res.json({ code })
@@ -39,7 +39,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Revoke invite link
-  router.post('/:sessionId/:jid/revoke-invite', async (req, res, next) => {
+  router.post('/:jid/revoke-invite', async (req, res, next) => {
     try {
       await getSock(req).groupRevokeInvite(req.params.jid)
       res.json({ success: true })
@@ -47,7 +47,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Accept group invite
-  router.post('/:sessionId/accept-invite', async (req, res, next) => {
+  router.post('/accept-invite', async (req, res, next) => {
     try {
       const { inviteCode } = req.body
       await getSock(req).groupAcceptInvite(inviteCode)
@@ -56,7 +56,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Leave group
-  router.post('/:sessionId/:jid/leave', async (req, res, next) => {
+  router.post('/:jid/leave', async (req, res, next) => {
     try {
       await getSock(req).groupLeave(req.params.jid)
       res.json({ success: true })
@@ -64,7 +64,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Update participants (add/remove/promote/demote)
-  router.patch('/:sessionId/:jid/participants', async (req, res, next) => {
+  router.patch('/:jid/participants', async (req, res, next) => {
     try {
       const { participants, action } = req.body
       // action: 'add' | 'remove' | 'promote' | 'demote'
@@ -74,7 +74,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Request participants update (approve/reject)
-  router.patch('/:sessionId/:jid/join-requests', async (req, res, next) => {
+  router.patch('/:jid/join-requests', async (req, res, next) => {
     try {
       const { participants, action } = req.body
       // action: 'approve' | 'reject'
@@ -84,7 +84,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Get pending join requests
-  router.get('/:sessionId/:jid/join-requests', async (req, res, next) => {
+  router.get('/:jid/join-requests', async (req, res, next) => {
     try {
       const result = await getSock(req).groupRequestParticipantsList(req.params.jid)
       res.json(result)
@@ -92,7 +92,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Update name
-  router.patch('/:sessionId/:jid/name', async (req, res, next) => {
+  router.patch('/:jid/name', async (req, res, next) => {
     try {
       await getSock(req).groupUpdateSubject(req.params.jid, req.body.name)
       res.json({ success: true })
@@ -100,7 +100,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Update description
-  router.patch('/:sessionId/:jid/description', async (req, res, next) => {
+  router.patch('/:jid/description', async (req, res, next) => {
     try {
       await getSock(req).groupUpdateDescription(req.params.jid, req.body.description)
       res.json({ success: true })
@@ -108,7 +108,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Update setting (announcement / not_announcement / locked / unlocked)
-  router.patch('/:sessionId/:jid/setting', async (req, res, next) => {
+  router.patch('/:jid/setting', async (req, res, next) => {
     try {
       await getSock(req).groupSettingUpdate(req.params.jid, req.body.setting)
       res.json({ success: true })
@@ -116,7 +116,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Member add mode
-  router.patch('/:sessionId/:jid/member-add-mode', async (req, res, next) => {
+  router.patch('/:jid/member-add-mode', async (req, res, next) => {
     try {
       await getSock(req).groupMemberAddMode(req.params.jid, req.body.mode)
       res.json({ success: true })
@@ -124,7 +124,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Toggle ephemeral
-  router.patch('/:sessionId/:jid/ephemeral', async (req, res, next) => {
+  router.patch('/:jid/ephemeral', async (req, res, next) => {
     try {
       await getSock(req).groupToggleEphemeral(req.params.jid, req.body.seconds || 0)
       res.json({ success: true })
@@ -132,7 +132,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Join approval mode
-  router.patch('/:sessionId/:jid/join-approval', async (req, res, next) => {
+  router.patch('/:jid/join-approval', async (req, res, next) => {
     try {
       await getSock(req).groupJoinApprovalMode(req.params.jid, req.body.mode)
       res.json({ success: true })
@@ -140,7 +140,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Get group info from invite link
-  router.post('/:sessionId/invite-info', async (req, res, next) => {
+  router.post('/invite-info', async (req, res, next) => {
     try {
       const { inviteCode } = req.body
       const result = await getSock(req).groupGetInviteInfo(inviteCode)
@@ -149,7 +149,7 @@ export function createGroupRoutes(sessionManager) {
   })
 
   // Update member label
-  router.patch('/:sessionId/:jid/member-label', async (req, res, next) => {
+  router.patch('/:jid/member-label', async (req, res, next) => {
     try {
       await getSock(req).updateMemberLabel(req.params.jid, req.body.label)
       res.json({ success: true })
