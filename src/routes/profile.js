@@ -2,12 +2,22 @@ import { Router } from 'express'
 import { resolveMedia } from '../utils/media.js'
 
 export function createProfileRoutes(sessionManager, upload) {
-  const router = Router()
+  const router = Router({ mergeParams: true })
 
   const getSock = (req) => sessionManager.getSessionSock(req.params.sessionId)
+  const getStore = (req) => sessionManager.getStore(req.params.sessionId)
+
+  // Get all contacts from store
+  router.get('/contacts', async (req, res, next) => {
+    try {
+      const store = getStore(req)
+      const contacts = store.contacts ? Object.values(store.contacts) : []
+      res.json(contacts)
+    } catch (err) { next(err) }
+  })
 
   // Get profile picture URL
-  router.get('/:sessionId/picture', async (req, res, next) => {
+  router.get('/picture', async (req, res, next) => {
     try {
       const { jid, type } = req.query
       const url = await getSock(req).profilePictureUrl(jid, type || 'image')
@@ -16,7 +26,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Update profile picture
-  router.put('/:sessionId/picture', upload.single('file'), async (req, res, next) => {
+  router.put('/picture', upload.single('file'), async (req, res, next) => {
     try {
       const { jid, url } = req.body
       const buffer = req.file ? req.file.buffer : await resolveMedia(url)
@@ -26,7 +36,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Remove profile picture
-  router.delete('/:sessionId/picture', async (req, res, next) => {
+  router.delete('/picture', async (req, res, next) => {
     try {
       const { jid } = req.body
       await getSock(req).removeProfilePicture(jid)
@@ -35,7 +45,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Update profile name
-  router.patch('/:sessionId/name', async (req, res, next) => {
+  router.patch('/name', async (req, res, next) => {
     try {
       await getSock(req).updateProfileName(req.body.name)
       res.json({ success: true })
@@ -43,7 +53,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Update profile status
-  router.patch('/:sessionId/status', async (req, res, next) => {
+  router.patch('/status', async (req, res, next) => {
     try {
       await getSock(req).updateProfileStatus(req.body.status)
       res.json({ success: true })
@@ -51,7 +61,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Block/unblock user
-  router.patch('/:sessionId/block', async (req, res, next) => {
+  router.patch('/block', async (req, res, next) => {
     try {
       const { jid, action } = req.body // action: 'block' | 'unblock'
       await getSock(req).updateBlockStatus(jid, action)
@@ -60,7 +70,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Fetch blocklist
-  router.get('/:sessionId/blocklist', async (req, res, next) => {
+  router.get('/blocklist', async (req, res, next) => {
     try {
       const result = await getSock(req).fetchBlocklist()
       res.json(result)
@@ -68,7 +78,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Chat modify (archive/mute/etc)
-  router.patch('/:sessionId/chat', async (req, res, next) => {
+  router.patch('/chat', async (req, res, next) => {
     try {
       const { jid, modifications } = req.body
       await getSock(req).chatModify(modifications, jid)
@@ -77,7 +87,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Contact management
-  router.post('/:sessionId/contact', async (req, res, next) => {
+  router.post('/contact', async (req, res, next) => {
     try {
       const { jid, displayName } = req.body
       await getSock(req).addOrEditContact(jid, { displayName })
@@ -85,7 +95,7 @@ export function createProfileRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
-  router.delete('/:sessionId/contact', async (req, res, next) => {
+  router.delete('/contact', async (req, res, next) => {
     try {
       await getSock(req).removeContact(req.body.jid)
       res.json({ success: true })
@@ -93,7 +103,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Labels
-  router.post('/:sessionId/label/chat', async (req, res, next) => {
+  router.post('/label/chat', async (req, res, next) => {
     try {
       const { jid, labelId } = req.body
       await getSock(req).addChatLabel(jid, labelId)
@@ -101,7 +111,7 @@ export function createProfileRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
-  router.delete('/:sessionId/label/chat', async (req, res, next) => {
+  router.delete('/label/chat', async (req, res, next) => {
     try {
       const { jid, labelId } = req.body
       await getSock(req).removeChatLabel(jid, labelId)
@@ -109,7 +119,7 @@ export function createProfileRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
-  router.post('/:sessionId/label/message', async (req, res, next) => {
+  router.post('/label/message', async (req, res, next) => {
     try {
       const { jid, messageId, labelId } = req.body
       await getSock(req).addMessageLabel(jid, messageId, labelId)
@@ -118,7 +128,7 @@ export function createProfileRoutes(sessionManager, upload) {
   })
 
   // Get business profile
-  router.get('/:sessionId/business', async (req, res, next) => {
+  router.get('/business', async (req, res, next) => {
     try {
       const result = await getSock(req).getBusinessProfile(req.query.jid)
       res.json(result)

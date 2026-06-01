@@ -132,6 +132,13 @@ export class SessionManager {
     return s.sock
   }
 
+  getStore(sessionId) {
+    const s = this.sessions.get(sessionId)
+    if (!s || !s.store)
+      throw new Error(`Session '${sessionId}' store not available`)
+    return s.store
+  }
+
   // ── Create / connect a session ─────────────────────────────────────────────
 
   async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
@@ -187,14 +194,18 @@ export class SessionManager {
     sessionData.lockRenewer = setInterval(() => renewLock(sessionId), LOCK_RENEW_MS)
 
     // ── Webhook helper ──────────────────────────────────────────────────────
-    const sendWebhook = (event, data) => {
+    const sendWebhook = async (event, data) => {
       const url = sessionData.webhook
       if (!url) return
-      fetch(url, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ sessionId, event, data, timestamp: Date.now() }),
-      }).catch(err => console.error(`[${sessionId}] Webhook error (${event}):`, err.message))
+      try {
+        await fetch(url, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ sessionId, event, data, timestamp: Date.now() }),
+        })
+      } catch (err) {
+        console.error(`[${sessionId}] Webhook error (${event}):`, err.message)
+      }
     }
 
     // ── Internal connect function (called on reconnects too) ────────────────
@@ -208,6 +219,14 @@ export class SessionManager {
           auth:               state,
           printQRInTerminal:  false,
           browser:            ['Ubuntu', 'Chrome', '20.0.04'],
+          markOnlineOnConnect: true,
+          getMessage: async (key) => {
+            if (sessionData.store) {
+              const msg = await sessionData.store.loadMessage(key.remoteJid, key.id)
+              return msg?.message || undefined
+            }
+            return { conversation: 'Offline message sync' }
+          }
         })
 
         const store = makeInMemoryStore({ logger, socket: sock })
@@ -223,9 +242,15 @@ export class SessionManager {
         // handle connection.update separately below to convert QR to dataURL.
         sock.ev.process(async (events) => {
           for (const [event, data] of Object.entries(events)) {
-            // Skip connection.update – handled explicitly below to convert QR
-            if (event !== 'connection.update') {
-              sendWebhook(event, data)
+            if (event === 'connection.update') continue;
+
+            if (event === 'messages.upsert' && data.messages && Array.isArray(data.messages)) {
+              // Send messages one by one so the backend can process them sequentially
+              for (const msg of data.messages) {
+                await sendWebhook('messages.upsert', { ...data, messages: [msg] })
+              }
+            } else {
+              await sendWebhook(event, data)
             }
           }
         })
@@ -327,6 +352,7 @@ export class SessionManager {
             sessionData.retries++
             if (sessionData.retries > 8) {
               console.error(`[${sessionId}] Too many reconnect attempts – giving up`)
+              sendWebhook('disconnected', { statusCode: code, reason: 'retries_exhausted' })
               this._cleanup(sessionId)
               return
             }
