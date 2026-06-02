@@ -249,7 +249,7 @@ export class SessionManager {
               const msg = await sessionData.store.loadMessage(key.remoteJid, key.id)
               return msg?.message || undefined
             }
-            return { conversation: 'Offline message sync' }
+            return undefined
           }
         })
 
