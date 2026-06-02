@@ -64,7 +64,7 @@ services:
 
     # Resource limits — tune to your server capacity
     deploy:
-      replicas: ${INITIAL_REPLICAS:-2}
+      replicas: 1
       resources:
         limits:
           cpus: "1.0"

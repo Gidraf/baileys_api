@@ -369,8 +369,6 @@ export class SessionManager {
 
             // ── Conflict (440) – another socket connected with same creds ─
             if (isConflict) {
-              // Check whether we still own the Redis lock.
-              // If we don't, another worker has taken over – shut down gracefully.
               const owner = await getLockOwner(sessionId)
               if (owner !== INSTANCE_ID) {
                 console.log(`[${sessionId}] Lock moved to ${owner} – shutting down this copy`)
@@ -378,22 +376,10 @@ export class SessionManager {
                 return
               }
 
-              sessionData.retries440++
-              if (sessionData.retries440 > 5) {
-                console.error(`[${sessionId}] Too many 440 conflicts – giving up`)
-                sendWebhook('disconnected', { statusCode: code, reason: 'conflict_loop' })
-                this._cleanup(sessionId)
-                return
-              }
-
-              // Exponential back-off: 2s, 4s, 8s, 16s, 32s
-              const waitMs = Math.min(1000 * Math.pow(2, sessionData.retries440), 32_000)
-              console.log(`[${sessionId}] 440 conflict #${sessionData.retries440} – retry in ${waitMs}ms`)
-              await delay(waitMs)
-
-              // Tear down current socket before reconnecting
-              try { sock.end() } catch {}
-              await doConnect()
+              console.error(`[${sessionId}] 440 conflict (replaced). Forcefully deleting session to prevent infinite loop. Please re-scan QR.`)
+              sendWebhook('disconnected', { statusCode: code, reason: 'conflict_loop' })
+              this._cleanup(sessionId)
+              try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
               return
             }
 
