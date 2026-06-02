@@ -292,7 +292,7 @@ export class SessionManager {
               // Queue messages one by one so the backend can process them sequentially
               for (const msg of data.messages) {
                 // Optional: skip messages sent by the bot itself to prevent infinite auto-reply loops
-                if (msg.key.fromMe) continue;
+                // if (msg.key.fromMe) continue;
                 
                 sendWebhook('messages.upsert', { ...data, messages: [msg] })
               }
