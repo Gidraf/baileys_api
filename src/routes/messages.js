@@ -12,6 +12,19 @@ export function createMessageRoutes(sm) {
     return {
       ...s,
       sendMessage: async (jid, content, options) => {
+        const isValidJid = (j) => {
+          if (!j || typeof j !== 'string') return false;
+          if (j === 'status@broadcast') return true;
+          const parts = j.split('@');
+          if (parts.length !== 2) return false;
+          return /^[0-9:\-]+$/.test(parts[0]);
+        };
+        
+        if (typeof jid === 'string' && !isValidJid(jid)) {
+          console.error(`[API] Blocked sending message to invalid JID: ${jid}`);
+          return { error: 'Invalid JID format', blocked: true };
+        }
+
         if (jid && typeof jid === 'string' && jid.includes('@s.whatsapp.net')) {
           try {
             const ids = await s.findUserId(jid);
@@ -39,6 +52,31 @@ export function createMessageRoutes(sm) {
     };
   }
   function store(req) { return sm.getStore(req.params.sessionId) }
+
+  // ── Middleware: Validate JID ────────────────────────────────────────────────
+  const validateJid = (req, res, next) => {
+    const { jid } = req.body;
+    if (jid) {
+      const isValid = (j) => {
+        if (!j || typeof j !== 'string') return false;
+        if (j === 'status@broadcast') return true;
+        const parts = j.split('@');
+        if (parts.length !== 2) return false;
+        return /^[0-9:\-]+$/.test(parts[0]);
+      };
+      
+      const checkJids = Array.isArray(jid) ? jid : [jid];
+      for (const j of checkJids) {
+        if (!isValid(j)) {
+          console.error(`[API] Blocked invalid JID: ${j}`);
+          return res.status(400).json({ error: 'Invalid JID format', blocked: true });
+        }
+      }
+    }
+    next();
+  };
+  
+  router.use(validateJid);
 
   // ── Fetch Messages ──────────────────────────────────────────────────────────
   router.get('/:jid', (req, res) => {
