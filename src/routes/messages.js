@@ -330,6 +330,7 @@ export function createMessageRoutes(sm) {
   router.post('/document', upload.single('file'), async (req, res) => {
     try {
       const { jid, url, mimetype = 'application/octet-stream', caption, fileName } = req.body
+      console.log(`[API] Received /document request for ${jid} (${fileName})`)
       const quoted = req.body.quoted ? JSON.parse(req.body.quoted) : undefined
       const document = req.file ? req.file.buffer : { url }
       const result = await sock(req).sendMessage(jid, { document, mimetype, caption, fileName }, quoted ? { quoted } : {})
