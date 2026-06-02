@@ -7,7 +7,37 @@ const upload = multer({ storage: multer.memoryStorage() })
 export function createMessageRoutes(sm) {
   const router = Router({ mergeParams: true })
 
-  function sock(req) { return sm.getSocket(req.params.sessionId) }
+  function sock(req) { 
+    const s = sm.getSocket(req.params.sessionId);
+    return {
+      ...s,
+      sendMessage: async (jid, content, options) => {
+        if (jid && typeof jid === 'string' && jid.includes('@s.whatsapp.net')) {
+          try {
+            const ids = await s.findUserId(jid);
+            if (ids && ids.lid) {
+              console.log(`[API] Auto-resolved ${jid} -> ${ids.lid}`);
+              jid = ids.lid;
+            }
+          } catch (e) {
+            console.log(`[API] LID resolution failed for ${jid}: ${e.message}`);
+          }
+        } else if (Array.isArray(jid)) {
+          // For status mention arrays, resolve each one
+          jid = await Promise.all(jid.map(async (j) => {
+            if (j && typeof j === 'string' && j.includes('@s.whatsapp.net')) {
+              try {
+                const ids = await s.findUserId(j);
+                if (ids && ids.lid) return ids.lid;
+              } catch (e) {}
+            }
+            return j;
+          }));
+        }
+        return s.sendMessage(jid, content, options);
+      }
+    };
+  }
   function store(req) { return sm.getStore(req.params.sessionId) }
 
   // ── Fetch Messages ──────────────────────────────────────────────────────────
