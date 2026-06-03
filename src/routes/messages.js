@@ -17,6 +17,8 @@ export function createMessageRoutes(sm) {
           if (j === 'status@broadcast') return true;
           const parts = j.split('@');
           if (parts.length !== 2) return false;
+          const validDomains = ['s.whatsapp.net', 'g.us', 'newsletter', 'lid'];
+          if (!validDomains.includes(parts[1])) return false;
           return /^[0-9:\-]+$/.test(parts[0]);
         };
         
@@ -53,19 +55,38 @@ export function createMessageRoutes(sm) {
   }
   function store(req) { return sm.getStore(req.params.sessionId) }
 
-  // ── Middleware: Validate JID ────────────────────────────────────────────────
+  // ── Middleware: Validate and Auto-Correct JID ─────────────────────────────────
   const validateJid = (req, res, next) => {
-    const { jid } = req.body;
+    let { jid } = req.body;
+    
+    const autoCorrect = (j) => {
+      if (!j || typeof j !== 'string') return j;
+      if (j === 'status@c.us' || j.toLowerCase() === 'status') return 'status@broadcast';
+      if (j.includes('@c.us@s.whatsapp.net')) return j.replace('@c.us@s.whatsapp.net', '@s.whatsapp.net');
+      if (j.endsWith('@c.us')) return j.replace('@c.us', '@s.whatsapp.net');
+      // Remove accidental ~ or spaces
+      return j.replace(/[~\s]/g, '');
+    };
+
+    const isValid = (j) => {
+      if (!j || typeof j !== 'string') return false;
+      if (j === 'status@broadcast') return true;
+      const parts = j.split('@');
+      if (parts.length !== 2) return false;
+      // valid domains: s.whatsapp.net, g.us, newsletter, lid
+      const validDomains = ['s.whatsapp.net', 'g.us', 'newsletter', 'lid'];
+      if (!validDomains.includes(parts[1])) return false;
+      return /^[0-9:\-]+$/.test(parts[0]);
+    };
+    
     if (jid) {
-      const isValid = (j) => {
-        if (!j || typeof j !== 'string') return false;
-        if (j === 'status@broadcast') return true;
-        const parts = j.split('@');
-        if (parts.length !== 2) return false;
-        return /^[0-9:\-]+$/.test(parts[0]);
-      };
+      if (Array.isArray(jid)) {
+        req.body.jid = jid.map(autoCorrect);
+      } else {
+        req.body.jid = autoCorrect(jid);
+      }
       
-      const checkJids = Array.isArray(jid) ? jid : [jid];
+      const checkJids = Array.isArray(req.body.jid) ? req.body.jid : [req.body.jid];
       for (const j of checkJids) {
         if (!isValid(j)) {
           console.error(`[API] Blocked invalid JID: ${j}`);

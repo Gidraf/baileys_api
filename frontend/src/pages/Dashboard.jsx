@@ -51,8 +51,10 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/sessions/${id}/qr`);
       if (res.ok) {
-        const data = await res.json();
-        if (data.qr) setQrCode(data.qr);
+        const json = await res.json();
+        if (json.type === 'qr' && json.data) {
+           setQrCode(json.data);
+        }
       }
     } catch (err) {}
   };
