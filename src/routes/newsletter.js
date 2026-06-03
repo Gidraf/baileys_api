@@ -125,7 +125,17 @@ export function createNewsletterRoutes(sessionManager, upload) {
 
   router.get('/subscribed', async (req, res, next) => {
     try {
-      const result = await getSock(req).newsletterSubscribed()
+      let result = await getSock(req).newsletterSubscribed()
+      // Filter out groups and ensure only newsletters are returned
+      if (typeof result === 'object' && result !== null) {
+        if (Array.isArray(result)) {
+            result = result.filter(item => item?.id?.endsWith('@newsletter') || item?.jid?.endsWith('@newsletter'))
+        } else {
+            result = Object.fromEntries(
+                Object.entries(result).filter(([jid, data]) => jid.endsWith('@newsletter'))
+            )
+        }
+      }
       res.json(result)
     } catch (err) { next(err) }
   })

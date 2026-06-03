@@ -405,16 +405,14 @@ export class SessionManager {
             // ── Normal / transient disconnect – reconnect ──────────────────
             sendWebhook('disconnected', { statusCode: code })
             sessionData.retries++
-            if (sessionData.retries > 8) {
-              console.error(`[${sessionId}] Too many reconnect attempts – giving up`)
-              sendWebhook('disconnected', { statusCode: code, reason: 'retries_exhausted' })
-              this._cleanup(sessionId)
-              return
-            }
-            const waitMs = Math.min(3000 * sessionData.retries, 30_000)
+            
+            // Retry indefinitely for normal disconnects, max wait 30s
+            const waitMs = Math.min(2000 * sessionData.retries, 30_000)
             console.log(`[${sessionId}] Reconnecting in ${waitMs}ms (attempt ${sessionData.retries})`)
             await delay(waitMs)
-            await doConnect()
+            if (!sessionData.dead) {
+              await doConnect()
+            }
           }
         })
 

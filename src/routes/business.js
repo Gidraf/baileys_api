@@ -1,16 +1,39 @@
 import { Router } from 'express'
 
 export function createBusinessRoutes(sessionManager, upload) {
-  const router = Router()
+  const router = Router({ mergeParams: true })
 
   const getSock = (req) => sessionManager.getSessionSock(req.params.sessionId)
 
   // Create product
-  router.post('/:sessionId/products', upload.array('images'), async (req, res, next) => {
+  router.post('/products', upload.array('images'), async (req, res, next) => {
     try {
       const data = JSON.parse(req.body.data || '{}')
       if (req.files?.length) {
         data.images = req.files.map(f => f.buffer)
+      } else if (data.images?.length) {
+        const { downloadToBuffer } = await import('../utils/media.js')
+        const resolved = []
+        for (const img of data.images) {
+          try {
+            let url = img.url || img
+            if (typeof url === 'string') {
+              const minioHost = process.env.STORAGE_ENDPOINT || 'minio:9000'
+              if (url.includes('localhost:9000')) {
+                url = url.replace('localhost:9000', minioHost)
+              } else if (url.includes('127.0.0.1:9000')) {
+                url = url.replace('127.0.0.1:9000', minioHost)
+              }
+              const buf = await downloadToBuffer(url)
+              resolved.push(buf)
+            }
+          } catch (err) {
+            console.error('Failed to resolve image URL to buffer', err)
+          }
+        }
+        if (resolved.length) {
+          data.images = resolved
+        }
       }
       const result = await getSock(req).productCreate(data)
       res.json(result)
@@ -18,11 +41,34 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Update product
-  router.patch('/:sessionId/products/:productId', upload.array('images'), async (req, res, next) => {
+  router.patch('/products/:productId', upload.array('images'), async (req, res, next) => {
     try {
       const data = JSON.parse(req.body.data || '{}')
       if (req.files?.length) {
         data.images = req.files.map(f => f.buffer)
+      } else if (data.images?.length) {
+        const { downloadToBuffer } = await import('../utils/media.js')
+        const resolved = []
+        for (const img of data.images) {
+          try {
+            let url = img.url || img
+            if (typeof url === 'string') {
+              const minioHost = process.env.STORAGE_ENDPOINT || 'minio:9000'
+              if (url.includes('localhost:9000')) {
+                url = url.replace('localhost:9000', minioHost)
+              } else if (url.includes('127.0.0.1:9000')) {
+                url = url.replace('127.0.0.1:9000', minioHost)
+              }
+              const buf = await downloadToBuffer(url)
+              resolved.push(buf)
+            }
+          } catch (err) {
+            console.error('Failed to resolve image URL to buffer', err)
+          }
+        }
+        if (resolved.length) {
+          data.images = resolved
+        }
       }
       const result = await getSock(req).productUpdate(req.params.productId, data)
       res.json(result)
@@ -30,7 +76,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Delete products
-  router.delete('/:sessionId/products', async (req, res, next) => {
+  router.delete('/products', async (req, res, next) => {
     try {
       const { productIds } = req.body
       await getSock(req).productDelete(productIds)
@@ -39,7 +85,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Get catalog
-  router.get('/:sessionId/catalog', async (req, res, next) => {
+  router.get('/catalog', async (req, res, next) => {
     try {
       const { jid, limit, cursor } = req.query
       const result = await getSock(req).getCatalog({ jid, limit: parseInt(limit) || 10, ...(cursor && { cursor }) })
@@ -48,7 +94,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Get collections
-  router.get('/:sessionId/collections', async (req, res, next) => {
+  router.get('/collections', async (req, res, next) => {
     try {
       const { jid, limit } = req.query
       const result = await getSock(req).getCollections(jid, parseInt(limit) || 10)
@@ -57,7 +103,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Get order details
-  router.get('/:sessionId/orders/:orderId', async (req, res, next) => {
+  router.get('/orders/:orderId', async (req, res, next) => {
     try {
       const { token } = req.query
       const result = await getSock(req).getOrderDetails(req.params.orderId, token)
@@ -66,7 +112,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Update business profile
-  router.put('/:sessionId/profile', async (req, res, next) => {
+  router.put('/profile', async (req, res, next) => {
     try {
       await getSock(req).updateBusinessProfile(req.body)
       res.json({ success: true })
@@ -74,7 +120,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Update cover photo
-  router.put('/:sessionId/cover', upload.single('file'), async (req, res, next) => {
+  router.put('/cover', upload.single('file'), async (req, res, next) => {
     try {
       const media = req.file ? { buffer: req.file.buffer } : { url: req.body.url }
       await getSock(req).updateCoverPhoto(media)
@@ -83,7 +129,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Remove cover photo
-  router.delete('/:sessionId/cover', async (req, res, next) => {
+  router.delete('/cover', async (req, res, next) => {
     try {
       await getSock(req).removeCoverPhoto(req.body.coverId)
       res.json({ success: true })
@@ -91,7 +137,7 @@ export function createBusinessRoutes(sessionManager, upload) {
   })
 
   // Quick replies
-  router.post('/:sessionId/quick-replies', async (req, res, next) => {
+  router.post('/quick-replies', async (req, res, next) => {
     try {
       const { shortcut, message } = req.body
       await getSock(req).addOrEditQuickReply({ shortcut, message })
@@ -99,7 +145,7 @@ export function createBusinessRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
-  router.delete('/:sessionId/quick-replies/:timestamp', async (req, res, next) => {
+  router.delete('/quick-replies/:timestamp', async (req, res, next) => {
     try {
       await getSock(req).removeQuickReply(req.params.timestamp)
       res.json({ success: true })
@@ -108,3 +154,4 @@ export function createBusinessRoutes(sessionManager, upload) {
 
   return router
 }
+

@@ -77,6 +77,19 @@ apiRouter.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionMa
 
 app.use('/api', apiRouter)
 
+import path from 'path'
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+// ─── Serve Frontend ───────────────────────────────────────────────────────────
+const distPath = path.join(__dirname, '../frontend/dist')
+app.use(express.static(distPath))
+app.get('*', (req, res) => {
+  res.sendFile(path.join(distPath, 'index.html'))
+})
+
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
   console.error(err)
