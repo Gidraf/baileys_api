@@ -45,7 +45,7 @@ export default function Playground() {
     if (msgType === 'media') return { jid: targetJid, imageUrl: mediaUrl || "https://example.com/img.jpg", caption: message };
     if (msgType === 'poll') return { jid: targetJid, poll: { name: pollName || "My Poll", values: pollOptions.filter(Boolean), selectableCount: 1 } };
     if (msgType === 'event') {
-        const start = eventDate ? Math.floor(new Date(eventDate).getTime()/1000) : Math.floor(Date.now()/1000) + 86400;
+        const start = eventDate ? new Date(eventDate).toISOString() : new Date(Date.now() + 86400000).toISOString();
         return { jid: targetJid, event: { name: eventName || "New Event", description: eventDesc, startTime: start } };
     }
     return {};

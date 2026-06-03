@@ -224,6 +224,10 @@ export function createMessageRoutes(sm) {
   router.post('/event', async (req, res) => {
     try {
       const { jid, event, quoted } = req.body
+      if (event) {
+        if (event.startTime) event.startTime = new Date(event.startTime)
+        if (event.endTime) event.endTime = new Date(event.endTime)
+      }
       const result = await sock(req).sendMessage(jid, { event }, quoted ? { quoted } : {})
       res.json(result)
     } catch (e) { res.status(500).json({ error: e.message }) }
