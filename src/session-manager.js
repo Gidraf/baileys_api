@@ -78,6 +78,26 @@ export class SessionManager {
     this.sessions = new Map()
     fs.mkdirSync(SESSIONS_DIR, { recursive: true })
     this._restoreExistingSessions()
+    
+    // Cleanup ephemeral sessions older than 24h
+    setInterval(() => this._cleanupEphemeralSessions(), 1000 * 60 * 60)
+  }
+
+  async _cleanupEphemeralSessions() {
+    try {
+      const dirs = fs.readdirSync(SESSIONS_DIR)
+      const now = Date.now()
+      for (const dir of dirs) {
+        const metaPath = path.join(SESSIONS_DIR, dir, 'meta.json')
+        if (fs.existsSync(metaPath)) {
+          const meta = JSON.parse(fs.readFileSync(metaPath))
+          if (meta.ephemeral && meta.createdAt && (now - meta.createdAt > 24 * 60 * 60 * 1000)) {
+            console.log(`[${dir}] Deleting expired ephemeral session`)
+            await this.deleteSession(dir)
+          }
+        }
+      }
+    } catch (e) { console.error('[SessionManager] Cleanup error', e.message) }
   }
 
   // ── Restore sessions that exist on disk (on startup) ──────────────────────
@@ -149,9 +169,10 @@ export class SessionManager {
 
   // ── Create / connect a session ─────────────────────────────────────────────
 
-  async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook } = {}) {
+  async createSession(sessionId, { phoneNumber, pairingCode: customCode, webhook, ephemeral } = {}) {
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
     const webhookFile = path.join(SESSIONS_DIR, sessionId, 'webhook.txt')
+    const metaFile = path.join(SESSIONS_DIR, sessionId, 'meta.json')
 
     // Already running in this worker
     if (this.sessions.has(sessionId)) {
@@ -172,6 +193,10 @@ export class SessionManager {
     }
 
     fs.mkdirSync(sessionDir, { recursive: true })
+
+    if (ephemeral && !fs.existsSync(metaFile)) {
+      try { fs.writeFileSync(metaFile, JSON.stringify({ ephemeral: true, createdAt: Date.now() })) } catch (e) {}
+    }
 
     let finalWebhook = webhook || null
     try {

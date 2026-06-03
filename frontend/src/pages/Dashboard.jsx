@@ -66,7 +66,7 @@ export default function Dashboard() {
       const res = await fetch('/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: inputSession })
+        body: JSON.stringify({ sessionId: inputSession, ephemeral: true })
       });
       if (res.ok) {
         localStorage.setItem('baileys_session', inputSession);

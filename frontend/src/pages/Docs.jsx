@@ -138,7 +138,7 @@ export default function Docs() {
             <button
               key={cat.category}
               onClick={() => setActiveCategory(cat.category)}
-              className={\`text-left px-4 py-2 rounded-lg font-medium transition-colors \${activeCategory === cat.category ? 'bg-[#25D366]/10 text-[#25D366]' : 'text-gray-400 hover:text-white'}\`}
+              className={`text-left px-4 py-2 rounded-lg font-medium transition-colors ${activeCategory === cat.category ? 'bg-[#25D366]/10 text-[#25D366]' : 'text-gray-400 hover:text-white'}`}
             >
               {cat.category}
             </button>
@@ -153,7 +153,7 @@ export default function Docs() {
             <div className="absolute top-0 left-0 w-2 h-full bg-[#25D366]"></div>
             
             <div className="flex items-center space-x-4 mb-4">
-              <span className={\`px-3 py-1 rounded font-bold text-xs \${endpoint.method === 'GET' ? 'bg-blue-500/20 text-blue-400' : endpoint.method === 'POST' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}\`}>
+              <span className={`px-3 py-1 rounded font-bold text-xs ${endpoint.method === 'GET' ? 'bg-blue-500/20 text-blue-400' : endpoint.method === 'POST' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
                 {endpoint.method}
               </span>
               <code className="text-gray-300 font-mono text-sm">{endpoint.path}</code>

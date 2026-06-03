@@ -12,10 +12,10 @@ export function createSessionRoutes(sessionManager, upload) {
   // Create / connect a session
   router.post('/', async (req, res, next) => {
     try {
-      const { sessionId, phoneNumber } = req.body
+      const { sessionId, phoneNumber, ephemeral } = req.body
       if (!sessionId) return res.status(400).json({ error: 'sessionId is required' })
 
-      const result = await sessionManager.createSession(sessionId, phoneNumber)
+      const result = await sessionManager.createSession(sessionId, { phoneNumber, ephemeral })
       res.json(result)
     } catch (err) { next(err) }
   })

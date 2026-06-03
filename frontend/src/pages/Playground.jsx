@@ -38,7 +38,7 @@ export default function Playground() {
     }
   }, [sessionId]);
 
-  const targetJid = recipient ? (recipient.includes('@') ? recipient : \`\${recipient}@s.whatsapp.net\`) : "254XXXXXXXXX@s.whatsapp.net";
+  const targetJid = recipient ? (recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`) : "254XXXXXXXXX@s.whatsapp.net";
 
   const getPayload = () => {
     if (msgType === 'text') return { jid: targetJid, text: message || "Hello" };
@@ -56,13 +56,13 @@ export default function Playground() {
     if (msgType === 'media') path = 'image';
     if (msgType === 'poll') path = 'poll';
     if (msgType === 'event') path = 'event';
-    return \`https://wabot.gidraf.dev/api/sessions/\${sessionId}/messages/\${path}\`;
+    return `https://wabot.gidraf.dev/api/sessions/${sessionId}/messages/${path}`;
   };
 
   const snippets = {
-    python: \`import requests\\n\\nurl = "\${getEndpointUrl()}"\\npayload = \${JSON.stringify(getPayload(), null, 2)}\\n\\nresponse = requests.post(url, json=payload)\\nprint(response.json())\`,
-    javascript: \`fetch("\${getEndpointUrl()}", {\\n  method: "POST",\\n  headers: { "Content-Type": "application/json" },\\n  body: JSON.stringify(\${JSON.stringify(getPayload(), null, 2).replace(/\\n/g, '\\n  ')})\\n})\\n.then(res => res.json())\\n.then(console.log);\`,
-    go: \`// Execute HTTP POST to \${getEndpointUrl()}\\n// With payload: \${JSON.stringify(getPayload())}\`
+    python: `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getPayload(), null, 2)}\n\nresponse = requests.post(url, json=payload)\nprint(response.json())`,
+    javascript: `fetch("${getEndpointUrl()}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${JSON.stringify(getPayload(), null, 2).replace(/\n/g, '\n  ')})\n})\n.then(res => res.json())\n.then(console.log);`,
+    go: `// Execute HTTP POST to ${getEndpointUrl()}\n// With payload: ${JSON.stringify(getPayload())}`
   };
 
   const executeApi = async (payload) => {
@@ -73,7 +73,7 @@ export default function Playground() {
       if (payload.poll) path = 'poll';
       if (payload.event) path = 'event';
 
-      const res = await fetch(\`/api/sessions/\${sessionId}/messages/\${path}\`, {
+      const res = await fetch(`/api/sessions/${sessionId}/messages/${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -174,7 +174,7 @@ export default function Playground() {
                   <button
                     key={t.id}
                     onClick={() => setMsgType(t.id)}
-                    className={\`flex-1 py-2 flex justify-center items-center space-x-2 rounded-md text-sm font-medium transition-colors \${msgType === t.id ? 'bg-[#222d34] text-[#25D366]' : 'text-gray-400 hover:text-white'}\`}
+                    className={`flex-1 py-2 flex justify-center items-center space-x-2 rounded-md text-sm font-medium transition-colors ${msgType === t.id ? 'bg-[#222d34] text-[#25D366]' : 'text-gray-400 hover:text-white'}`}
                   >
                     <t.icon className="w-4 h-4" /> <span>{t.label}</span>
                   </button>
@@ -251,7 +251,7 @@ export default function Playground() {
             <button 
               onClick={handleSendAction}
               disabled={sending || !recipient || sessionId === '{SESSION_ID}'}
-              className={\`w-full text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center \${scheduleTime ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-[#25D366] hover:bg-[#128C7E] shadow-[#25D366]/20'}\`}
+              className={`w-full text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center ${scheduleTime ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-[#25D366] hover:bg-[#128C7E] shadow-[#25D366]/20'}`}
             >
               {sending ? 'Processing...' : (scheduleTime ? 'Schedule Message' : 'Execute Request')}
             </button>
