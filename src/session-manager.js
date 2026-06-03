@@ -142,8 +142,8 @@ export class SessionManager {
 
   getStore(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s || !s.store)
-      throw new Error(`Session '${sessionId}' store not available`)
+    if (!s) throw new Error(`Session '${sessionId}' not found`)
+    if (!s.store) throw new Error(`Session '${sessionId}' store not fully initialized yet.`)
     return s.store
   }
 
@@ -233,6 +233,10 @@ export class SessionManager {
 
     // ── Internal connect function (called on reconnects too) ────────────────
     const doConnect = async () => {
+      if (sessionData.dead) {
+        console.log(`[${sessionId}] Session is dead. Aborting doConnect.`)
+        return
+      }
       try {
         sessionData.status = 'connecting'
         const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
@@ -376,10 +380,25 @@ export class SessionManager {
                 return
               }
 
-              console.error(`[${sessionId}] 440 conflict (replaced). Forcefully deleting session to prevent infinite loop. Please re-scan QR.`)
-              sendWebhook('disconnected', { statusCode: code, reason: 'conflict_loop' })
-              this._cleanup(sessionId)
-              try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+              sessionData.retries440++
+              if (sessionData.retries440 > 12) {
+                console.error(`[${sessionId}] Too many 440 conflicts – forcing session deletion. Please re-scan QR.`)
+                sendWebhook('disconnected', { statusCode: code, reason: 'conflict_loop' })
+                this._cleanup(sessionId)
+                try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+                return
+              }
+
+              // Exponential back-off: 2s, 4s, 8s, 16s, 32s, max 60s
+              const waitMs = Math.min(1000 * Math.pow(2, sessionData.retries440), 60_000)
+              console.log(`[${sessionId}] 440 conflict #${sessionData.retries440} – waiting ${waitMs}ms before reconnecting...`)
+              sendWebhook('disconnected', { statusCode: code, reason: 'conflict_retry' })
+              
+              await delay(waitMs)
+              if (!sessionData.dead) {
+                try { sock.end() } catch {}
+                await doConnect()
+              }
               return
             }
 
@@ -415,6 +434,8 @@ export class SessionManager {
   _cleanup(sessionId) {
     const s = this.sessions.get(sessionId)
     if (!s) return
+    s.dead = true
+    if (s.storeInterval) clearInterval(s.storeInterval)
     if (s.lockRenewer) clearInterval(s.lockRenewer)
     if (s.sock) { try { s.sock.end() } catch {} }
     releaseLock(sessionId)
