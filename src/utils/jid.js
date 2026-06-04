@@ -16,8 +16,8 @@ export function sanitizeJid(jid) {
     return clean.replace('@c.us', '@s.whatsapp.net');
   }
 
-  // If it's a numeric string without any domain suffix (e.g. "2547XXXXXXXX"), append @s.whatsapp.net
-  if (/^[0-9:\-]+$/.test(clean) && !clean.includes('@')) {
+  // If it's an alphanumeric string without any domain suffix, append @s.whatsapp.net
+  if (/^[a-zA-Z0-9:\.\-_]+$/.test(clean) && !clean.includes('@')) {
     return `${clean}@s.whatsapp.net`;
   }
 
@@ -30,8 +30,9 @@ export function isValidJid(jid) {
   const parts = jid.split('@');
   if (parts.length !== 2) return false;
   
-  const validDomains = ['s.whatsapp.net', 'g.us', 'newsletter', 'lid'];
+  const validDomains = ['s.whatsapp.net', 'g.us', 'newsletter', 'lid', 'broadcast'];
   if (!validDomains.includes(parts[1])) return false;
   
-  return /^[0-9:\-]+$/.test(parts[0]);
+  // Allow alphanumeric characters, colons, dots, hyphens, and underscores in the user ID part
+  return /^[a-zA-Z0-9:\.\-_]+$/.test(parts[0]);
 }
