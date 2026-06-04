@@ -1,11 +1,39 @@
 import { Router } from 'express'
 import { resolveMedia } from '../utils/media.js'
+import { sanitizeJid, isValidJid } from '../utils/jid.js'
 
 export function createProfileRoutes(sessionManager, upload) {
   const router = Router({ mergeParams: true })
 
   const getSock = (req) => sessionManager.getSessionSock(req.params.sessionId)
   const getStore = (req) => sessionManager.getStore(req.params.sessionId)
+
+  const validateAndSanitizeJid = (req, res, next) => {
+    if (req.query.jid) {
+      req.query.jid = sanitizeJid(req.query.jid);
+      if (!isValidJid(req.query.jid)) {
+        return res.status(400).json({ error: 'Invalid JID format' });
+      }
+    }
+    if (req.body.jid) {
+      if (Array.isArray(req.body.jid)) {
+        req.body.jid = req.body.jid.map(sanitizeJid);
+        for (const j of req.body.jid) {
+          if (!isValidJid(j)) {
+            return res.status(400).json({ error: 'Invalid JID format' });
+          }
+        }
+      } else {
+        req.body.jid = sanitizeJid(req.body.jid);
+        if (!isValidJid(req.body.jid)) {
+          return res.status(400).json({ error: 'Invalid JID format' });
+        }
+      }
+    }
+    next();
+  };
+
+  router.use(validateAndSanitizeJid);
 
   // Get all contacts from store
   router.get('/contacts', async (req, res, next) => {
