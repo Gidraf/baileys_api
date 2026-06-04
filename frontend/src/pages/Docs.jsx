@@ -10,45 +10,47 @@ const ENDPOINTS = [
         title: "Create Session",
         method: "POST",
         path: "/api/sessions",
-        description: "Creates a new WhatsApp session and returns status or pairing code details.",
+        description: "Creates a new WhatsApp session and returns connection or pairing details.",
         payload: '{\n  "sessionId": "my-session",\n  "phoneNumber": "254XXXXXXXXX",\n  "pairingCode": "ABCDEFGH",\n  "webhook": "https://mywebhook.com/handler"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions", json={\n  "sessionId": "my-session",\n  "phoneNumber": "254XXXXXXXXX",\n  "webhook": "https://mywebhook.com/handler"\n})',
-          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions", {\n  method: "POST",\n  headers: {"Content-Type":"application/json"},\n  body: JSON.stringify({\n    sessionId: "my-session",\n    phoneNumber: "254XXXXXXXXX",\n    webhook: "https://mywebhook.com/handler"\n  })\n})',
-          go: '// Go code\npayload := []byte(`{"sessionId":"my-session"}`)\nresp, _ := http.Post("https://wabot.gidraf.dev/api/sessions", "application/json", bytes.NewBuffer(payload))'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions", json={\n  "sessionId": "my-session",\n  "phoneNumber": "254XXXXXXXXX"\n})',
+          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions", { method: "POST", body: JSON.stringify({ sessionId: "my-session" }) })'
+        }
+      },
+      {
+        title: "List Sessions",
+        method: "GET",
+        path: "/api/sessions",
+        description: "Get all active sessions managed by this API server instance.",
+        snippets: {
+          python: 'import requests\nprint(requests.get("https://wabot.gidraf.dev/api/sessions").json())'
         }
       },
       {
         title: "Get Session Status",
         method: "GET",
         path: "/api/sessions/:sessionId",
-        description: "Check if a session is connected, connecting, or disconnected.",
+        description: "Returns connection status (connecting, open, closed) and registered metadata.",
         snippets: {
-          python: 'import requests\nprint(requests.get("https://wabot.gidraf.dev/api/sessions/my-session").json())',
-          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session").then(r=>r.json()).then(console.log)',
-          go: 'resp, _ := http.Get("https://wabot.gidraf.dev/api/sessions/my-session")'
+          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session").then(r => r.json()).then(console.log)'
         }
       },
       {
         title: "Get QR Code",
         method: "GET",
         path: "/api/sessions/:sessionId/qr",
-        description: "Returns the base64 PNG QR code or the active pairing code.",
+        description: "Returns base64 encoded QR code PNG data or active pairing code.",
         snippets: {
-          python: 'import requests\nprint(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/qr").json())',
-          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session/qr").then(r=>r.json()).then(console.log)',
-          go: 'resp, _ := http.Get("https://wabot.gidraf.dev/api/sessions/my-session/qr")'
+          python: 'import requests\nprint(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/qr").json())'
         }
       },
       {
         title: "Delete Session",
         method: "DELETE",
         path: "/api/sessions/:sessionId",
-        description: "Logs out and permanently deletes session files.",
+        description: "Logs out WhatsApp client, releases locks, and cleans up auth files.",
         snippets: {
-          python: 'import requests\nrequests.delete("https://wabot.gidraf.dev/api/sessions/my-session")',
-          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session", { method: "DELETE" })',
-          go: 'req, _ := http.NewRequest("DELETE", "https://wabot.gidraf.dev/api/sessions/my-session", nil)\nhttp.DefaultClient.Do(req)'
+          python: 'import requests\nrequests.delete("https://wabot.gidraf.dev/api/sessions/my-session")'
         }
       }
     ]
@@ -60,49 +62,187 @@ const ENDPOINTS = [
         title: "Send Text Message",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/text",
-        description: "Send a plain text message with optional mentions.",
+        description: "Sends a plain text message with optional mentions.",
         payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Hello World",\n  "mentions": ["254YYYYYYYYY@s.whatsapp.net"]\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/text", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Hello"\n})',
-          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session/messages/text", {\n  method: "POST",\n  headers: {"Content-Type":"application/json"},\n  body: JSON.stringify({ jid: "254XXXXXXXXX@s.whatsapp.net", text: "Hello" })\n})',
-          go: '// Send message in Go'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/text", json={"jid": "...", "text": "Hello"})'
         }
       },
       {
         title: "Send Image",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/image",
-        description: "Send an image via URL or multipart file upload.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/image.png",\n  "caption": "Check this out!"\n}',
+        description: "Send image media via URL, base64, or multipart file upload.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/image.png",\n  "caption": "Beautiful view",\n  "viewOnce": false\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/image", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/image.png",\n  "caption": "Caption"\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/image", json={"jid": "...", "url": "https://..."})'
+        }
+      },
+      {
+        title: "Send Video",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/video",
+        description: "Send video media via URL or multipart file upload.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/video.mp4",\n  "caption": "Video Title"\n}',
+        snippets: {
+          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/my-session/messages/video", { method: "POST", body: JSON.stringify({...}) })'
+        }
+      },
+      {
+        title: "Send Audio",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/audio",
+        description: "Send audio media files (supports PTT / voice messages).",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/audio.mp3",\n  "ptt": true\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/audio", json={"jid": "...", "url": "...", "ptt": True})'
+        }
+      },
+      {
+        title: "Send Sticker",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/sticker",
+        description: "Sends a WebP sticker.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/sticker.webp"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/sticker", json={"jid": "...", "url": "..."})'
+        }
+      },
+      {
+        title: "Send Document",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/document",
+        description: "Send any document (PDF, DOCX, ZIP etc.) with customized filename.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "url": "https://example.com/doc.pdf",\n  "mimetype": "application/pdf",\n  "fileName": "ProjectProposal.pdf"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/document", json={"jid": "...", "url": "...", "fileName": "proposal.pdf"})'
+        }
+      },
+      {
+        title: "Send Contact",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/contact",
+        description: "Sends contact details card formatted in Vcard.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "displayName": "Jane Doe",\n  "vcard": "BEGIN:VCARD\\nVERSION:3.0\\nFN:Jane Doe\\nTEL;type=CELL;type=VOICE;type=pref:+254700000000\\nEND:VCARD"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/contact", json={"jid": "...", "displayName": "Jane", "vcard": "..."})'
+        }
+      },
+      {
+        title: "Send Location",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/location",
+        description: "Sends location latitude/longitude coordinates.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "latitude": -1.2921,\n  "longitude": 36.8219,\n  "name": "Nairobi HQ"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/location", json={"jid": "...", "latitude": -1.2921, "longitude": 36.8219, "name": "Nairobi"})'
+        }
+      },
+      {
+        title: "Send Poll",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/poll",
+        description: "Send poll questions with custom options.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "poll": {\n    "name": "Which platform?",\n    "values": ["React", "Vue"],\n    "selectableCount": 1\n  }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/poll", json={"jid": "...", "poll": {"name": "...", "values": ["A", "B"]}})'
+        }
+      },
+      {
+        title: "Send Event",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/event",
+        description: "Send group event scheduler details.",
+        payload: '{\n  "jid": "120363XXXXXX@g.us",\n  "event": {\n    "name": "Meeting",\n    "description": "Weekly Sync",\n    "startTime": "2026-06-05T12:00:00Z"\n  }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/event", json={"jid": "...", "event": {"name": "Sync", "startTime": "2026-06-05T12:00:00Z"}})'
+        }
+      },
+      {
+        title: "Send Group Invite",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/group-invite",
+        description: "Send a stylized invitation to join a group chat.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "groupInvite": {\n    "inviteCode": "ABCDEF1234",\n    "inviteExpiration": 1780480908,\n    "text": "Join our official announcements group!",\n    "jid": "1203632XXXX@g.us",\n    "subject": "Main Group"\n  }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/group-invite", json={"jid": "...", "groupInvite": {...}})'
         }
       },
       {
         title: "Send Reaction",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/reaction",
-        description: "React to a message with an emoji.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKey": {\n    "remoteJid": "254XXXXXXXXX@s.whatsapp.net",\n    "fromMe": false,\n    "id": "MSG_ID_123"\n  },\n  "emoji": "👍"\n}',
+        description: "React to a target message with an emoji.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKey": {\n    "remoteJid": "254XXXXXXXXX@s.whatsapp.net",\n    "fromMe": false,\n    "id": "MSG_ID_123"\n  },\n  "emoji": "🔥"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/reaction", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKey": {"id": "MSG_ID_123", "fromMe": False, "remoteJid": "254XXXXXXXXX@s.whatsapp.net"},\n  "emoji": "👍"\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/reaction", json={"jid": "...", "messageKey": {}, "emoji": "🔥"})'
         }
       },
       {
         title: "Star Messages",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/star",
-        description: "Star or unstar messages in a chat conversation.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKeys": [\n    { "id": "MSG_ID_123", "fromMe": true }\n  ],\n  "star": true\n}',
+        description: "Star or unstar message keys.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKeys": [{ "id": "MSG_ID_123", "fromMe": true }],\n  "star": true\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/star", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKeys": [{"id": "MSG_ID_123", "fromMe": True}],\n  "star": True\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/star", json={"jid": "...", "messageKeys": [], "star": True})'
+        }
+      },
+      {
+        title: "Pin Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/pin",
+        description: "Pin a message in a conversation for a duration.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKey": { "id": "MSG_ID_123", "fromMe": false },\n  "time": 86400,\n  "type": 1\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/pin", json={"jid": "...", "messageKey": {}, "time": 86400})'
+        }
+      },
+      {
+        title: "Keep Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/keep",
+        description: "Keep a message in an ephemeral (disappearing) chat.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "messageKey": { "id": "MSG_ID_123", "fromMe": false },\n  "type": 1\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/keep", json={"jid": "...", "messageKey": {}, "type": 1})'
+        }
+      },
+      {
+        title: "Forward Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/forward",
+        description: "Forward an existing message structure.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "message": {},\n  "force": true\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/forward", json={"jid": "...", "message": {}})'
+        }
+      },
+      {
+        title: "Mark Messages Read",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/read",
+        description: "Send read receipt ticks for a list of message keys.",
+        payload: '{\n  "keys": [{ "remoteJid": "254XXXXXXXXX@s.whatsapp.net", "id": "MSG_ID_123", "fromMe": false }]\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/read", json={"keys": []})'
+        }
+      },
+      {
+        title: "Send Presence Update",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/presence",
+        description: "Sends presence states (composing, recording, available, unavailable) to JID.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "composing"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/presence", json={"jid": "...", "type": "composing"})'
         }
       },
       {
         title: "Create Call Link",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/call-link",
-        description: "Generate a custom voice or video call join link.",
+        description: "Generates a customized video/audio call link.",
         payload: '{\n  "type": "video"\n}',
         snippets: {
           python: 'import requests\nprint(requests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/call-link", json={"type": "video"}).json())'
@@ -114,53 +254,113 @@ const ENDPOINTS = [
     category: "Messages (Interactive & Rich)",
     items: [
       {
-        title: "Interactive Messages (NativeFlow / Carousel)",
+        title: "Interactive Flow / Carousel / Buttons",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/interactive",
-        description: "Send premium interactive flows, buttons, lists or carousel cards.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Select your plan",\n  "nativeFlow": {\n    "buttons": [\n      { "text": "Basic Plan", "id": "plan_basic" },\n      { "text": "Pro Plan", "id": "plan_pro" },\n      { "text": "Visit Website", "url": "https://ajiriwa.gidraf.dev" }\n    ]\n  }\n}',
+        description: "Send advanced interactive Native Flows, CTA Buttons, or Carousel Cards.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Choose options",\n  "nativeFlow": {\n    "buttons": [\n      { "text": "Basic Plan", "id": "plan_basic" },\n      { "text": "Sign Up Free", "url": "https://ajiriwa.gidraf.dev" }\n    ]\n  }\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/interactive", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Plan Selection",\n  "nativeFlow": { "buttons": [{ "text": "Plan A", "id": "a" }] }\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/interactive", json={"jid": "...", "text": "...", "nativeFlow": {...}})'
+        }
+      },
+      {
+        title: "Template Buttons",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/template",
+        description: "Send hydrated template buttons (URL, phone number links).",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Select action",\n  "templateButtons": [\n    { "index": 1, "urlButton": { "displayText": "Ajiriwa Portal", "url": "https://ajiriwa.gidraf.dev" } }\n  ]\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/template", json={"jid": "...", "text": "...", "templateButtons": []})'
+        }
+      },
+      {
+        title: "List Menu Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/list",
+        description: "Send interactive single-select menus.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "text": "Choose a service",\n  "buttonText": "View Menu",\n  "title": "Main Menu",\n  "sections": [\n    {\n      "title": "Recruitment",\n      "rows": [{ "title": "CV Reviews", "rowId": "cv_review", "description": "Auto replies" }]\n    }\n  ]\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/list", json={"jid": "...", "text": "...", "sections": []})'
+        }
+      },
+      {
+        title: "Rich Text Response",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/rich-response",
+        description: "Send text with metadata formatting.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "disclaimerText": "Confidential",\n  "richResponse": { "body": "Welcome back" }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/rich-response", json={"jid": "...", "richResponse": {}})'
+        }
+      },
+      {
+        title: "Code Block Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/code-block",
+        description: "Send monospace styled blocks of source code.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "code": "console.log(\'Hello World\');",\n  "language": "javascript",\n  "disclaimerText": "Source Code"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/code-block", json={"jid": "...", "code": "..."})'
+        }
+      },
+      {
+        title: "Table Message",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/table",
+        description: "Send formatted layouts representing comparative values.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "title": "Project Summary",\n  "table": {\n    "headers": ["Service", "Price"],\n    "rows": [["ERP", "$19"], ["CRM", "$49"]]\n  }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/table", json={"jid": "...", "table": {}})'
+        }
+      },
+      {
+        title: "Send Album",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/album",
+        description: "Send collections of images or videos grouped together.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "album": {\n    "name": "Product Portfolio",\n    "items": [\n      { "image": { "url": "https://example.com/img1.jpg" }, "caption": "A1" }\n    ]\n  }\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/album", json={"jid": "...", "album": {}})'
         }
       },
       {
         title: "Send Sticker Pack",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/sticker-pack",
-        description: "Sends a full pack of stickers with custom metadata.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "name": "My Pack Name",\n  "publisher": "Developer",\n  "description": "My WhatsApp Sticker Pack",\n  "cover": "https://example.com/cover.png",\n  "stickers": [\n    { "data": "https://example.com/sticker1.png", "emojis": ["🎉"] },\n    { "data": "https://example.com/sticker2.png", "emojis": ["✨"] }\n  ]\n}',
+        description: "Builds and sends a packed WebP sticker zip bundle.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "name": "Sticker Pack",\n  "publisher": "Baileys API",\n  "cover": "https://wabot.gidraf.dev/assets/logo.png",\n  "stickers": [\n    { "data": "https://wabot.gidraf.dev/assets/logo.png", "emojis": ["🔥"] }\n  ]\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/sticker-pack", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "name": "Pack Name",\n  "publisher": "Creator",\n  "cover": "https://example.com/cover.png",\n  "stickers": [{"data": "https://example.com/sticker1.png"}]\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/sticker-pack", json={"jid": "...", "stickers": []})'
         }
       },
       {
-        title: "Send Album Message",
+        title: "Send Catalog Product",
         method: "POST",
-        path: "/api/sessions/:sessionId/messages/album",
-        description: "Send multiple image/video items grouped together as an album.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "album": {\n    "name": "Album Name",\n    "items": [\n      { "image": { "url": "https://example.com/img1.jpg" }, "caption": "Item 1" },\n      { "image": { "url": "https://example.com/img2.jpg" }, "caption": "Item 2" }\n    ]\n  }\n}',
+        path: "/api/sessions/:sessionId/messages/product",
+        description: "Send catalog detail item card.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "businessOwnerJid": "2547XXXXXXXX@s.whatsapp.net",\n  "image": "https://example.com/img.jpg",\n  "product": { "title": "Vite React Template", "currencyCode": "KES", "priceAmount1000": 500000 }\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/album", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "album": {"items": [{"image": {"url": "https://example.com/img.jpg"}}]}\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/product", json={"jid": "...", "product": {}})'
         }
       },
       {
-        title: "Send View-Once Media",
+        title: "View Once Media",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/view-once",
-        description: "Send image, video, or audio as view-once media.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "image",\n  "url": "https://example.com/image.jpg",\n  "viewOnceType": "viewOnceV2",\n  "caption": "Secret image"\n}',
+        description: "Sends ephemeral media (viewOnce, viewOnceV2, or viewOnceV2Extension).",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "image",\n  "url": "https://example.com/pic.jpg",\n  "viewOnceType": "viewOnceV2",\n  "caption": "Disappearing photo"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/view-once", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "image",\n  "url": "https://example.com/image.jpg",\n  "viewOnceType": "viewOnceV2"\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/view-once", json={"jid": "...", "type": "image", "viewOnceType": "viewOnceV2"})'
         }
       },
       {
         title: "Modify Message (Edit/Delete)",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/modify",
-        description: "Edit or delete an already sent message.",
-        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "edit",\n  "messageKey": {\n    "remoteJid": "254XXXXXXXXX@s.whatsapp.net",\n    "fromMe": true,\n    "id": "MSG_ID_123"\n  },\n  "text": "This is the updated message content"\n}',
+        description: "Execute edit or revoke actions on already sent messages.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "edit",\n  "messageKey": { "id": "MSG_ID_123", "fromMe": true },\n  "text": "New content"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/modify", json={\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "edit",\n  "messageKey": {"id": "MSG_ID_123", "fromMe": True, "remoteJid": "254XXXXXXXXX@s.whatsapp.net"},\n  "text": "New Text"\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/modify", json={"jid": "...", "type": "edit", "messageKey": {}})'
         }
       }
     ]
@@ -172,20 +372,29 @@ const ENDPOINTS = [
         title: "Create Group",
         method: "POST",
         path: "/api/sessions/:sessionId/groups",
-        description: "Create a new group with participants.",
-        payload: '{\n  "name": "My New Group",\n  "participants": ["254XXXXXXXXX@s.whatsapp.net"]\n}',
+        description: "Create a new group chat.",
+        payload: '{\n  "name": "My Tech Team",\n  "participants": ["254XXXXXXXXX@s.whatsapp.net"]\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/groups", json={\n  "name": "Group Name",\n  "participants": ["254XXXXXXXXX@s.whatsapp.net"]\n})'
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/groups", json={"name": "Team", "participants": []})'
         }
       },
       {
-        title: "Manage Participants",
+        title: "List Groups",
+        method: "GET",
+        path: "/api/sessions/:sessionId/groups",
+        description: "Get all participating groups.",
+        snippets: {
+          python: 'requests.get("https://wabot.gidraf.dev/api/sessions/my-session/groups")'
+        }
+      },
+      {
+        title: "Manage Members",
         method: "PATCH",
         path: "/api/sessions/:sessionId/groups/:jid/participants",
-        description: "Add, remove, promote, or demote participants.",
+        description: "Modify group members (add, remove, promote, demote).",
         payload: '{\n  "participants": ["254XXXXXXXXX@s.whatsapp.net"],\n  "action": "add"\n}',
         snippets: {
-          python: 'import requests\nrequests.patch("https://wabot.gidraf.dev/api/sessions/my-session/groups/1203632XXXX@g.us/participants", json={\n  "participants": ["254XXXXXXXXX@s.whatsapp.net"],\n  "action": "add"\n})'
+          python: 'requests.patch("https://wabot.gidraf.dev/api/sessions/my-session/groups/1203632@g.us/participants", json={"participants": [], "action": "add"})'
         }
       }
     ]
@@ -197,20 +406,20 @@ const ENDPOINTS = [
         title: "Create Community",
         method: "POST",
         path: "/api/sessions/:sessionId/community",
-        description: "Create a community to group chats and send broadcasts.",
-        payload: '{\n  "name": "My Business Community",\n  "description": "Welcome to our community!"\n}',
+        description: "Create a community root structure.",
+        payload: '{\n  "name": "Corporate Hub",\n  "description": "Primary community"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/community", json={\n  "name": "Community Name",\n  "description": "Desc"\n})'
+          python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/community", json={"name": "Hub"})'
         }
       },
       {
         title: "Link Group to Community",
         method: "POST",
         path: "/api/sessions/:sessionId/community/:jid/link-group",
-        description: "Link a group to the community.",
-        payload: '{\n  "groupJid": "120363XXXXXXXX@g.us"\n}',
+        description: "Link sub group chats under a community JID.",
+        payload: '{\n  "groupJid": "1203632XXXX@g.us"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/community/120363XXXXX@g.us/link-group", json={\n  "groupJid": "120363XXXXXXXX@g.us"\n})'
+          python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/community/120363community@g.us/link-group", json={"groupJid": "..."})'
         }
       }
     ]
@@ -222,19 +431,19 @@ const ENDPOINTS = [
         title: "Create Newsletter",
         method: "POST",
         path: "/api/sessions/:sessionId/newsletter",
-        description: "Creates a public WhatsApp channel/newsletter.",
-        payload: '{\n  "name": "My Tech Channel",\n  "description": "Daily technology updates."\n}',
+        description: "Create public newsletter channels.",
+        payload: '{\n  "name": "Daily Bulletins",\n  "description": "Tech feeds"\n}',
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter", json={\n  "name": "Tech Channel",\n  "description": "Desc"\n})'
+          python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter", json={"name": "Feeds"})'
         }
       },
       {
-        title: "Follow Newsletter",
+        title: "Follow Channel",
         method: "POST",
         path: "/api/sessions/:sessionId/newsletter/:jid/follow",
-        description: "Follows a WhatsApp channel.",
+        description: "Subscribes the WhatsApp account to follow the channel.",
         snippets: {
-          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter/120363XXXX@newsletter/follow")'
+          python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter/120363@newsletter/follow")'
         }
       }
     ]
@@ -243,52 +452,41 @@ const ENDPOINTS = [
     category: "Business & Privacy",
     items: [
       {
+        title: "Check WhatsApp Account",
+        method: "POST",
+        path: "/api/sessions/:sessionId/profile/on-whatsapp",
+        description: "Verify if a list of phone numbers have registered WhatsApp accounts.",
+        payload: '{\n  "numbers": ["2547XXXXXXXX", "2547YYYYYYYY"]\n}',
+        snippets: {
+          python: 'print(requests.post("https://wabot.gidraf.dev/api/sessions/my-session/profile/on-whatsapp", json={"numbers": ["2547XXXXXXXX"]}).json())'
+        }
+      },
+      {
+        title: "Fetch Privacy Settings",
+        method: "GET",
+        path: "/api/sessions/:sessionId/privacy",
+        description: "Retrieve active preferences for last-seen, read receipts, online status, groups etc.",
+        snippets: {
+          python: 'print(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/privacy").json())'
+        }
+      },
+      {
         title: "Update Business Profile",
         method: "PUT",
         path: "/api/sessions/:sessionId/business/profile",
-        description: "Updates business profile details like address, email, hours, and description.",
-        payload: '{\n  "description": "High quality products",\n  "address": "123 Main St",\n  "email": "contact@business.com",\n  "vertical": "Shopping & Retail"\n}',
+        description: "Updates vertical, address, description, and website.",
+        payload: '{\n  "description": "Retail center",\n  "email": "retail@shop.com"\n}',
         snippets: {
-          python: 'import requests\nrequests.put("https://wabot.gidraf.dev/api/sessions/my-session/business/profile", json={\n  "description": "Store description"\n})'
+          python: 'requests.put("https://wabot.gidraf.dev/api/sessions/my-session/business/profile", json={"description": "..."})'
         }
       },
       {
-        title: "Check WhatsApp Registration",
-        method: "POST",
-        path: "/api/sessions/:sessionId/profile/on-whatsapp",
-        description: "Check if multiple phone numbers are registered WhatsApp accounts.",
-        payload: '{\n  "numbers": ["2547XXXXXXXX", "2547YYYYYYYY"]\n}',
-        snippets: {
-          python: 'import requests\nprint(requests.post("https://wabot.gidraf.dev/api/sessions/my-session/profile/on-whatsapp", json={\n  "numbers": ["2547XXXXXXXX"]\n}).json())'
-        }
-      },
-      {
-        title: "Get Privacy Settings",
+        title: "Get Contacts List",
         method: "GET",
-        path: "/api/sessions/:sessionId/privacy",
-        description: "Fetch all active account privacy settings.",
+        path: "/api/sessions/:sessionId/profile/contacts",
+        description: "Query cached and sync'd contact objects from store memory.",
         snippets: {
-          python: 'import requests\nprint(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/privacy").json())'
-        }
-      },
-      {
-        title: "Update Privacy: Last Seen",
-        method: "PATCH",
-        path: "/api/sessions/:sessionId/privacy/last-seen",
-        description: "Update last-seen visibility settings.",
-        payload: '{\n  "value": "contacts"\n}',
-        snippets: {
-          python: 'import requests\nrequests.patch("https://wabot.gidraf.dev/api/sessions/my-session/privacy/last-seen", json={\n  "value": "contacts"\n})'
-        }
-      },
-      {
-        title: "Update Privacy: Read Receipts",
-        method: "PATCH",
-        path: "/api/sessions/:sessionId/privacy/read-receipts",
-        description: "Toggle blue ticks / read receipts.",
-        payload: '{\n  "value": "none"\n}',
-        snippets: {
-          python: 'import requests\nrequests.patch("https://wabot.gidraf.dev/api/sessions/my-session/privacy/read-receipts", json={\n  "value": "none"\n})'
+          python: 'print(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/profile/contacts").json())'
         }
       }
     ]
@@ -327,7 +525,7 @@ export default function Docs() {
             <div className="absolute top-0 left-0 w-2 h-full bg-[#25D366]"></div>
             
             <div className="flex items-center space-x-4 mb-4">
-              <span className={`px-3 py-1 rounded font-bold text-xs ${endpoint.method === 'GET' ? 'bg-blue-500/20 text-blue-400' : endpoint.method === 'POST' ? 'bg-green-500/20 text-green-400' : endpoint.method === 'PATCH' ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
+              <span className={`px-3 py-1 rounded font-bold text-xs ${endpoint.method === 'GET' ? 'bg-blue-500/20 text-blue-400' : endpoint.method === 'POST' ? 'bg-green-500/20 text-green-400' : endpoint.method === 'PATCH' ? 'bg-purple-500/20 text-purple-400' : endpoint.method === 'PATCH' ? 'bg-purple-500/20 text-purple-400' : 'bg-red-500/20 text-red-400'}`}>
                 {endpoint.method}
               </span>
               <code className="text-gray-300 font-mono text-sm">{endpoint.path}</code>

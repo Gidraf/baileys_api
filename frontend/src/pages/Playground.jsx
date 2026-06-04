@@ -1,23 +1,283 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Terminal, Key, FileText, CheckCircle2, Clock, Calendar, ListTodo, Image as ImageIcon } from 'lucide-react';
+import { Send, Terminal, Key, FileText, CheckCircle2, Clock, Calendar, ListTodo, Image as ImageIcon, Code } from 'lucide-react';
 import CodeSnippet from '../components/CodeSnippet';
+
+const PLAYGROUND_ENDPOINTS = [
+  {
+    id: 'text',
+    label: 'Send Text Message',
+    path: 'text',
+    defaultPayload: {
+      text: "Hello from the API playground!"
+    }
+  },
+  {
+    id: 'image',
+    label: 'Send Image',
+    path: 'image',
+    defaultPayload: {
+      url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
+      caption: "Beautiful digital art"
+    }
+  },
+  {
+    id: 'video',
+    label: 'Send Video',
+    path: 'video',
+    defaultPayload: {
+      url: "https://www.w3schools.com/html/mov_bbb.mp4",
+      caption: "Big Buck Bunny movie trailer"
+    }
+  },
+  {
+    id: 'audio',
+    label: 'Send Audio / Voice',
+    path: 'audio',
+    defaultPayload: {
+      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+      ptt: false
+    }
+  },
+  {
+    id: 'sticker',
+    label: 'Send Sticker',
+    path: 'sticker',
+    defaultPayload: {
+      url: "https://wabot.gidraf.dev/assets/logo.png"
+    }
+  },
+  {
+    id: 'document',
+    label: 'Send Document',
+    path: 'document',
+    defaultPayload: {
+      url: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+      mimetype: "application/pdf",
+      fileName: "test_document.pdf",
+      caption: "Important documentation"
+    }
+  },
+  {
+    id: 'poll',
+    label: 'Send Poll',
+    path: 'poll',
+    defaultPayload: {
+      poll: {
+        name: "What is your preferred development stack?",
+        values: ["Vite + React", "Next.js", "Nuxt + Vue"],
+        selectableCount: 1
+      }
+    }
+  },
+  {
+    id: 'event',
+    label: 'Send Event',
+    path: 'event',
+    defaultPayload: {
+      event: {
+        name: "Weekly Technical Sync",
+        description: "Developer team align and status report",
+        startTime: new Date(Date.now() + 86400000).toISOString()
+      }
+    }
+  },
+  {
+    id: 'interactive',
+    label: 'Interactive Messages (Native Flow/Buttons/Carousel)',
+    path: 'interactive',
+    defaultPayload: {
+      text: "Select a package that works for you",
+      nativeFlow: {
+        buttons: [
+          { "text": "Ajiriwa ERP", "id": "ajiriwa_erp" },
+          { "text": "Ajiriwa CRM", "id": "ajiriwa_crm" },
+          { "text": "Sign Up Free", "url": "https://ajiriwa.gidraf.dev" }
+        ]
+      }
+    }
+  },
+  {
+    id: 'template',
+    label: 'Template Buttons',
+    path: 'template',
+    defaultPayload: {
+      text: "Click one of the call-to-actions below:",
+      templateButtons: [
+        { "index": 1, "urlButton": { "displayText": "View ajiriwa.gidraf.dev", "url": "https://ajiriwa.gidraf.dev" } },
+        { "index": 2, "callButton": { "displayText": "Contact Sales", "phoneNumber": "254700000000" } }
+      ]
+    }
+  },
+  {
+    id: 'list',
+    label: 'List Menu',
+    path: 'list',
+    defaultPayload: {
+      text: "Select from the list below",
+      buttonText: "Browse Menu",
+      title: "Services Catalog",
+      sections: [
+        {
+          title: "Recruitment Tools",
+          rows: [
+            { "title": "CV Auto-Review", "rowId": "cv_review", "description": "Review and reply automatically via WhatsApp" }
+          ]
+        },
+        {
+          title: "E-Commerce",
+          rows: [
+            { "title": "Logistics Bot", "rowId": "logistics", "description": "Handle customer delivery status" }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    id: 'album',
+    label: 'Send Album',
+    path: 'album',
+    defaultPayload: {
+      album: {
+        name: "Product Highlights",
+        items: [
+          { "image": { "url": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe" }, "caption": "Art 1" },
+          { "image": { "url": "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119" }, "caption": "Art 2" }
+        ]
+      }
+    }
+  },
+  {
+    id: 'sticker-pack',
+    label: 'Send Sticker Pack',
+    path: 'sticker-pack',
+    defaultPayload: {
+      name: "Ajiriwa Pack",
+      publisher: "Baileys API",
+      description: "Custom WhatsApp stickers",
+      cover: "https://wabot.gidraf.dev/assets/logo.png",
+      stickers: [
+        { "data": "https://wabot.gidraf.dev/assets/logo.png", "emojis": ["🎉"] }
+      ]
+    }
+  },
+  {
+    id: 'product',
+    label: 'Send Catalog Product',
+    path: 'product',
+    defaultPayload: {
+      businessOwnerJid: "2547XXXXXXXX@s.whatsapp.net",
+      image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
+      product: {
+        title: "Vite + React Integration Service",
+        description: "Full setup of custom backend & frontend components",
+        currencyCode: "KES",
+        priceAmount1000: 50000000
+      }
+    }
+  },
+  {
+    id: 'view-once',
+    label: 'Send View Once Media',
+    path: 'view-once',
+    defaultPayload: {
+      type: "image",
+      url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
+      viewOnceType: "viewOnceV2",
+      caption: "This image will disappear after opening"
+    }
+  },
+  {
+    id: 'modify',
+    label: 'Modify Message (Edit/Delete)',
+    path: 'modify',
+    defaultPayload: {
+      type: "edit",
+      messageKey: {
+        remoteJid: "2547XXXXXXXX@s.whatsapp.net",
+        fromMe: true,
+        id: "MSG_ID_ABC"
+      },
+      text: "This is the updated message content!"
+    }
+  },
+  {
+    id: 'reaction',
+    label: 'Send Reaction',
+    path: 'reaction',
+    defaultPayload: {
+      messageKey: {
+        remoteJid: "2547XXXXXXXX@s.whatsapp.net",
+        fromMe: false,
+        id: "MSG_ID_ABC"
+      },
+      emoji: "❤️"
+    }
+  },
+  {
+    id: 'pin',
+    label: 'Pin Message',
+    path: 'pin',
+    defaultPayload: {
+      messageKey: {
+        remoteJid: "2547XXXXXXXX@s.whatsapp.net",
+        fromMe: false,
+        id: "MSG_ID_ABC"
+      },
+      time: 86400,
+      type: 1
+    }
+  },
+  {
+    id: 'keep',
+    label: 'Keep Message',
+    path: 'keep',
+    defaultPayload: {
+      messageKey: {
+        remoteJid: "2547XXXXXXXX@s.whatsapp.net",
+        fromMe: false,
+        id: "MSG_ID_ABC"
+      },
+      type: 1
+    }
+  },
+  {
+    id: 'star',
+    label: 'Star Message',
+    path: 'star',
+    defaultPayload: {
+      messageKeys: [
+        { "id": "MSG_ID_ABC", "fromMe": true }
+      ],
+      star: true
+    }
+  },
+  {
+    id: 'call-link',
+    label: 'Create Call Link',
+    path: 'call-link',
+    defaultPayload: {
+      type: "video"
+    }
+  },
+  {
+    id: 'presence',
+    label: 'Send Presence Update',
+    path: 'presence',
+    defaultPayload: {
+      type: "composing"
+    }
+  }
+];
 
 export default function Playground() {
   const sessionId = localStorage.getItem('baileys_session') || '{SESSION_ID}';
   const [contacts, setContacts] = useState([]);
   const [recipient, setRecipient] = useState('');
-  const [msgType, setMsgType] = useState('text');
-  const [message, setMessage] = useState('');
-  const [mediaUrl, setMediaUrl] = useState('');
   
-  // Poll
-  const [pollName, setPollName] = useState('');
-  const [pollOptions, setPollOptions] = useState(['Yes', 'No']);
-  
-  // Event
-  const [eventName, setEventName] = useState('');
-  const [eventDesc, setEventDesc] = useState('');
-  const [eventDate, setEventDate] = useState('');
+  const [activeEndpointId, setActiveEndpointId] = useState(PLAYGROUND_ENDPOINTS[0].id);
+  const [jsonPayloadString, setJsonPayloadString] = useState(
+    JSON.stringify(PLAYGROUND_ENDPOINTS[0].defaultPayload, null, 2)
+  );
 
   // Scheduler
   const [scheduleTime, setScheduleTime] = useState('');
@@ -25,6 +285,7 @@ export default function Playground() {
 
   const [sending, setSending] = useState(false);
   const [response, setResponse] = useState(null);
+  const [jsonError, setJsonError] = useState(null);
 
   useEffect(() => {
     if (sessionId && sessionId !== '{SESSION_ID}') {
@@ -38,42 +299,56 @@ export default function Playground() {
     }
   }, [sessionId]);
 
+  const activeEndpoint = PLAYGROUND_ENDPOINTS.find(e => e.id === activeEndpointId) || PLAYGROUND_ENDPOINTS[0];
   const targetJid = recipient ? (recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`) : "254XXXXXXXXX@s.whatsapp.net";
 
-  const getPayload = () => {
-    if (msgType === 'text') return { jid: targetJid, text: message || "Hello" };
-    if (msgType === 'media') return { jid: targetJid, imageUrl: mediaUrl || "https://example.com/img.jpg", caption: message };
-    if (msgType === 'poll') return { jid: targetJid, poll: { name: pollName || "My Poll", values: pollOptions.filter(Boolean), selectableCount: 1 } };
-    if (msgType === 'event') {
-        const start = eventDate ? new Date(eventDate).toISOString() : new Date(Date.now() + 86400000).toISOString();
-        return { jid: targetJid, event: { name: eventName || "New Event", description: eventDesc, startTime: start } };
+  // When endpoint selection changes, populate default JSON payload
+  const handleEndpointChange = (id) => {
+    setActiveEndpointId(id);
+    const endpoint = PLAYGROUND_ENDPOINTS.find(e => e.id === id);
+    if (endpoint) {
+      setJsonPayloadString(JSON.stringify(endpoint.defaultPayload, null, 2));
+      setJsonError(null);
     }
-    return {};
+  };
+
+  const handleJsonChange = (val) => {
+    setJsonPayloadString(val);
+    try {
+      JSON.parse(val);
+      setJsonError(null);
+    } catch (e) {
+      setJsonError(e.message);
+    }
+  };
+
+  const getCombinedPayload = () => {
+    try {
+      const parsed = JSON.parse(jsonPayloadString);
+      // Automatically merge JID if applicable
+      if (activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && !parsed.jid) {
+        parsed.jid = targetJid;
+      }
+      return parsed;
+    } catch (e) {
+      return {};
+    }
   };
 
   const getEndpointUrl = () => {
-    let path = 'text';
-    if (msgType === 'media') path = 'image';
-    if (msgType === 'poll') path = 'poll';
-    if (msgType === 'event') path = 'event';
-    return `https://wabot.gidraf.dev/api/sessions/${sessionId}/messages/${path}`;
+    return `https://wabot.gidraf.dev/api/sessions/${sessionId}/messages/${activeEndpoint.path}`;
   };
 
   const snippets = {
-    python: `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getPayload(), null, 2)}\n\nresponse = requests.post(url, json=payload)\nprint(response.json())`,
-    javascript: `fetch("${getEndpointUrl()}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${JSON.stringify(getPayload(), null, 2).replace(/\n/g, '\n  ')})\n})\n.then(res => res.json())\n.then(console.log);`,
-    go: `// Execute HTTP POST to ${getEndpointUrl()}\n// With payload: ${JSON.stringify(getPayload())}`
+    python: `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getCombinedPayload(), null, 2)}\n\nresponse = requests.post(url, json=payload)\nprint(response.json())`,
+    javascript: `fetch("${getEndpointUrl()}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${JSON.stringify(getCombinedPayload(), null, 2).replace(/\n/g, '\n  ')})\n})\n.then(res => res.json())\n.then(console.log);`,
+    go: `// Execute HTTP POST to ${getEndpointUrl()}\n// With payload: ${JSON.stringify(getCombinedPayload())}`
   };
 
   const executeApi = async (payload) => {
     setSending(true);
     try {
-      let path = 'text';
-      if (payload.imageUrl) path = 'image';
-      if (payload.poll) path = 'poll';
-      if (payload.event) path = 'event';
-
-      const res = await fetch(`/api/sessions/${sessionId}/messages/${path}`, {
+      const res = await fetch(`/api/sessions/${sessionId}/messages/${activeEndpoint.path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -87,14 +362,16 @@ export default function Playground() {
   };
 
   const handleSendAction = () => {
-    if (!sessionId || sessionId === '{SESSION_ID}' || !recipient) return;
-    const payload = getPayload();
+    if (!sessionId || sessionId === '{SESSION_ID}') return;
+    if (jsonError) return;
+
+    const payload = getCombinedPayload();
 
     if (scheduleTime) {
       const delayMs = new Date(scheduleTime).getTime() - Date.now();
       if (delayMs > 0) {
         const taskId = Math.random().toString(36).substring(7);
-        const task = { id: taskId, type: msgType, time: scheduleTime, payload };
+        const task = { id: taskId, type: activeEndpoint.label, time: scheduleTime, payload };
         setScheduledTasks(prev => [...prev, task]);
         
         setTimeout(() => {
@@ -116,7 +393,7 @@ export default function Playground() {
         <Terminal className="w-8 h-8 text-[#25D366]" />
         <div>
           <h2 className="text-3xl font-bold text-white tracking-tight">API Playground</h2>
-          <p className="text-gray-400 mt-1">Test your endpoints, select contacts, and schedule messages entirely in the browser.</p>
+          <p className="text-gray-400 mt-1">Select any exposed endpoint, build custom JSON structures, and schedule actions instantly.</p>
         </div>
       </div>
 
@@ -138,106 +415,62 @@ export default function Playground() {
               </div>
             </div>
 
-            {/* Contact Selector */}
+            {/* Endpoint Selector */}
             <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Recipient (Select or Type)</label>
-              <div className="flex flex-col space-y-2">
-                <select 
-                  onChange={e => setRecipient(e.target.value)}
-                  className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#25D366]"
-                >
-                  <option value="">-- Choose from Contacts --</option>
-                  {contacts.map((c, i) => (
-                    <option key={i} value={c.id || c.jid}>{c.name || c.notify || c.id || c.jid}</option>
-                  ))}
-                </select>
-                <input 
-                  type="text" 
-                  value={recipient}
-                  onChange={e => setRecipient(e.target.value)}
-                  placeholder="Or type number manually (e.g. 2547XXXXXXXXX)"
-                  className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#25D366]"
-                />
-              </div>
-            </div>
-
-            {/* Type Selector */}
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-2">Message Type</label>
-              <div className="flex space-x-2 bg-[#111b21] p-1 rounded-lg border border-[#222d34]">
-                {[
-                  { id: 'text', icon: FileText, label: 'Text' },
-                  { id: 'media', icon: ImageIcon, label: 'Media' },
-                  { id: 'poll', icon: ListTodo, label: 'Poll' },
-                  { id: 'event', icon: Calendar, label: 'Event' }
-                ].map(t => (
-                  <button
-                    key={t.id}
-                    onClick={() => setMsgType(t.id)}
-                    className={`flex-1 py-2 flex justify-center items-center space-x-2 rounded-md text-sm font-medium transition-colors ${msgType === t.id ? 'bg-[#222d34] text-[#25D366]' : 'text-gray-400 hover:text-white'}`}
-                  >
-                    <t.icon className="w-4 h-4" /> <span>{t.label}</span>
-                  </button>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Select Endpoint / Feature</label>
+              <select 
+                value={activeEndpointId}
+                onChange={e => handleEndpointChange(e.target.value)}
+                className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white font-medium focus:outline-none focus:border-[#25D366]"
+              >
+                {PLAYGROUND_ENDPOINTS.map(ep => (
+                  <option key={ep.id} value={ep.id}>{ep.label} ({`/messages/${ep.path}`})</option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            {/* Dynamic Inputs based on Type */}
-            {msgType === 'text' && (
+            {/* Contact Selector (only render if endpoint requires JID) */}
+            {activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && (
               <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Message Text</label>
-                <textarea 
-                  value={message} onChange={e => setMessage(e.target.value)} rows={3}
-                  className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:border-[#25D366] resize-none"
-                />
-              </div>
-            )}
-
-            {msgType === 'media' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Media URL</label>
-                  <input type="text" value={mediaUrl} onChange={e => setMediaUrl(e.target.value)} placeholder="https://..." className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366]" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Caption</label>
-                  <input type="text" value={message} onChange={e => setMessage(e.target.value)} className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366]" />
-                </div>
-              </div>
-            )}
-
-            {msgType === 'poll' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Poll Question</label>
-                  <input type="text" value={pollName} onChange={e => setPollName(e.target.value)} className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366]" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Options</label>
-                  {pollOptions.map((opt, i) => (
-                    <div key={i} className="flex space-x-2 mb-2">
-                      <input type="text" value={opt} onChange={e => {
-                        const newOpts = [...pollOptions]; newOpts[i] = e.target.value; setPollOptions(newOpts);
-                      }} className="flex-1 bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366]" />
-                    </div>
-                  ))}
-                  <button onClick={() => setPollOptions([...pollOptions, ''])} className="text-[#25D366] text-sm font-medium hover:underline">+ Add Option</button>
+                <label className="block text-sm font-medium text-gray-400 mb-1">Recipient (Select or Type)</label>
+                <div className="flex flex-col space-y-2">
+                  <select 
+                    onChange={e => setRecipient(e.target.value)}
+                    className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#25D366]"
+                  >
+                    <option value="">-- Choose from Contacts --</option>
+                    {contacts.map((c, i) => (
+                      <option key={i} value={c.id || c.jid}>{c.name || c.notify || c.id || c.jid}</option>
+                    ))}
+                  </select>
+                  <input 
+                    type="text" 
+                    value={recipient}
+                    onChange={e => setRecipient(e.target.value)}
+                    placeholder="Or type number manually (e.g. 2547XXXXXXXXX)"
+                    className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#25D366]"
+                  />
                 </div>
               </div>
             )}
 
-            {msgType === 'event' && (
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Event Name</label>
-                  <input type="text" value={eventName} onChange={e => setEventName(e.target.value)} className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366]" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Date & Time</label>
-                  <input type="datetime-local" value={eventDate} onChange={e => setEventDate(e.target.value)} className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-2 text-white focus:border-[#25D366] color-scheme-dark" />
-                </div>
+            {/* JSON Payload Editor */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="text-sm font-medium text-gray-400">JSON Payload</label>
+                {jsonError ? (
+                  <span className="text-xs font-semibold text-red-500">Invalid JSON: {jsonError}</span>
+                ) : (
+                  <span className="text-xs font-semibold text-emerald-500">Valid JSON Structure</span>
+                )}
               </div>
-            )}
+              <textarea 
+                value={jsonPayloadString} 
+                onChange={e => handleJsonChange(e.target.value)} 
+                rows={10}
+                className="w-full bg-[#0b141a] border border-[#222d34] p-4 rounded-xl text-sm font-mono text-yellow-400 focus:outline-none focus:border-[#25D366] resize-none"
+              />
+            </div>
 
             {/* Scheduler UI */}
             <div className="bg-[#0b141a] p-4 rounded-xl border border-[#222d34]">
@@ -250,8 +483,8 @@ export default function Playground() {
 
             <button 
               onClick={handleSendAction}
-              disabled={sending || !recipient || sessionId === '{SESSION_ID}'}
-              className={`w-full text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center ${scheduleTime ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-[#25D366] hover:bg-[#128C7E] shadow-[#25D366]/20'}`}
+              disabled={sending || (activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && !recipient) || sessionId === '{SESSION_ID}' || !!jsonError}
+              className={`w-full text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center ${scheduleTime ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-[#25D366] hover:bg-[#128C7E] shadow-[#25D366]/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {sending ? 'Processing...' : (scheduleTime ? 'Schedule Message' : 'Execute Request')}
             </button>
@@ -284,7 +517,7 @@ export default function Playground() {
                   <div key={task.id} className="bg-[#111b21] p-3 rounded-lg border border-[#222d34] flex justify-between items-center text-sm">
                     <div>
                       <span className="font-bold text-blue-400 uppercase mr-2">{task.type}</span>
-                      <span className="text-gray-400">To: {task.payload.jid.split('@')[0]}</span>
+                      <span className="text-gray-400">To: {task.payload.jid ? task.payload.jid.split('@')[0] : 'N/A'}</span>
                     </div>
                     <span className="font-mono text-gray-500 text-xs">{new Date(task.time).toLocaleTimeString()}</span>
                   </div>
