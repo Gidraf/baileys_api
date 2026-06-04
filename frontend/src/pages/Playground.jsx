@@ -592,6 +592,9 @@ export default function Playground() {
   };
 
   const snippets = {
+    curl: activeEndpoint.method === 'GET'
+      ? `curl '${getEndpointUrl()}'`
+      : `curl -X ${activeEndpoint.method || 'POST'} '${getEndpointUrl()}' \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(getCombinedPayload())}'`,
     python: activeEndpoint.method === 'GET'
       ? `import requests\n\nurl = "${getEndpointUrl()}"\n\nresponse = requests.get(url)\nprint(response.json())`
       : `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getCombinedPayload(), null, 2)}\n\nresponse = requests.${(activeEndpoint.method || 'post').toLowerCase()}(url, json=payload)\nprint(response.json())`,
