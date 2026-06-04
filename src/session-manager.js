@@ -87,10 +87,25 @@ async function parseMessageForWebhooks(msg, store, sendWebhook) {
       try {
         const pollMsg = await store.loadMessage(creationMsgKey.remoteJid, creationMsgKey.id);
         if (pollMsg) {
-          const pollEncKey = pollMsg.messageContextInfo?.messageSecret;
+          // The messageSecret may be deserialized from JSON as a plain object {type:'Buffer',data:[...]}
+          // instead of a Uint8Array. Re-hydrate it so hmacSign doesn't fail.
+          let pollEncKey = pollMsg.messageContextInfo?.messageSecret;
+          if (pollEncKey && !Buffer.isBuffer(pollEncKey) && !(pollEncKey instanceof Uint8Array)) {
+            // Handle JSON deserialized Buffer: {type:'Buffer',data:[...]} or just {data:[...]}
+            if (pollEncKey.data) {
+              pollEncKey = Buffer.from(pollEncKey.data);
+            } else if (Array.isArray(pollEncKey)) {
+              pollEncKey = Buffer.from(pollEncKey);
+            }
+          }
           if (pollEncKey) {
+            // Ensure it's a proper Buffer
+            pollEncKey = Buffer.from(pollEncKey);
+            
             const pollCreatorJid = jidNormalizedUser(creationMsgKey.participant || creationMsgKey.remoteJid);
             const voterJid = jidNormalizedUser(msg.key.participant || msg.key.remoteJid);
+
+            console.log(`[Poll] Decrypting vote from ${voterJid} on poll ${creationMsgKey.id} by ${pollCreatorJid}`);
             
             const decrypted = decryptPollVote(
               pollUpdate.vote,
@@ -102,21 +117,29 @@ async function parseMessageForWebhooks(msg, store, sendWebhook) {
               }
             );
 
-            if (decrypted && decrypted.selectedOptions) {
+            // Cover all poll creation message variants (V1 through V5)
+            const pollCreationMsg = pollMsg.message?.pollCreationMessage ||
+                                   pollMsg.message?.pollCreationMessageV2 ||
+                                   pollMsg.message?.pollCreationMessageV3 ||
+                                   pollMsg.message?.pollCreationMessageV4 ||
+                                   pollMsg.message?.pollCreationMessageV5;
+
+            const pollName = pollCreationMsg?.name || "";
+            const originalPollOptions = pollCreationMsg?.options?.map(o => o.optionName) || [];
+
+            console.log(`[Poll] Decrypted selectedOptions count: ${decrypted?.selectedOptions?.length ?? 'null'}, original options: [${originalPollOptions.join(', ')}]`);
+
+            if (decrypted && decrypted.selectedOptions !== undefined) {
               const selectedOptionsHex = decrypted.selectedOptions.map(h => Buffer.from(h).toString('hex'));
-              const pollCreationMsg = pollMsg.message?.pollCreationMessage || 
-                                     pollMsg.message?.pollCreationMessageV2 || 
-                                     pollMsg.message?.pollCreationMessageV3;
-              
-              const pollName = pollCreationMsg?.name || "";
-              const originalPollOptions = pollCreationMsg?.options?.map(o => o.optionName) || [];
               
               const selectedOptions = originalPollOptions.filter(opt => {
                 const optHash = crypto.createHash('sha256').update(opt).digest('hex');
                 return selectedOptionsHex.includes(optHash);
               });
 
-              // Send poll.vote event
+              console.log(`[Poll] Resolved vote: [${selectedOptions.join(', ')}] from hashes: [${selectedOptionsHex.join(', ')}]`);
+
+              // Send poll.vote event (also fires on deselect-all: selectedOptions=[])
               sendWebhook('poll.vote', {
                 pollJid: creationMsgKey.remoteJid,
                 pollId: creationMsgKey.id,
@@ -152,16 +175,21 @@ async function parseMessageForWebhooks(msg, store, sendWebhook) {
               pollMsg.pollUpdates.forEach(u => {
                 const voter = jidNormalizedUser(u.pollUpdateMessageKey.participant || u.pollUpdateMessageKey.remoteJid);
                 let decVote = u.vote;
-                if (decVote && !decVote.selectedOptions) {
+                // decVote already has selectedOptions if it was decrypted in this run
+                if (decVote && decVote.selectedOptions !== undefined) {
+                  // selectedOptions may be empty (deselect-all) — still track it to zero-out old votes
+                  latestVotes.set(voter, decVote.selectedOptions.map(h => Buffer.from(h).toString('hex')));
+                } else if (decVote) {
+                  // Old stored raw vote that needs re-decryption
                   try {
                     decVote = decryptPollVote(
                       decVote,
                       { pollEncKey, pollCreatorJid, pollMsgId: creationMsgKey.id, voterJid: voter }
                     );
+                    if (decVote && decVote.selectedOptions !== undefined) {
+                      latestVotes.set(voter, decVote.selectedOptions.map(h => Buffer.from(h).toString('hex')));
+                    }
                   } catch (e) {}
-                }
-                if (decVote && decVote.selectedOptions) {
-                  latestVotes.set(voter, decVote.selectedOptions.map(h => Buffer.from(h).toString('hex')));
                 }
               });
 
@@ -185,10 +213,15 @@ async function parseMessageForWebhooks(msg, store, sendWebhook) {
                 timestamp: Date.now()
               });
             }
+          } else {
+            console.warn(`[Poll] No messageSecret/pollEncKey found for poll ${creationMsgKey.id}. Check that messageContextInfo is stored correctly.`);
           }
+        } else {
+          console.warn(`[Poll] Poll creation message not found in store: JID=${creationMsgKey.remoteJid} ID=${creationMsgKey.id}. Cannot decrypt vote.`);
         }
       } catch (err) {
         console.error('[SessionManager] Failed to decrypt poll vote:', err.message);
+        console.error(err.stack);
       }
     }
   }
