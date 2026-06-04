@@ -148,6 +148,26 @@ export function createNewsletterRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
+  router.post('/:jid/post', upload.single('file'), async (req, res, next) => {
+    try {
+      const { jid } = req.params
+      const { type = 'text', text, caption, url } = req.body
+      
+      let payload
+      if (type === 'text') {
+        payload = { text }
+      } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'document') {
+        const media = req.file ? req.file.buffer : { url }
+        payload = { [type]: media, caption }
+      } else {
+        return res.status(400).json({ error: 'Unsupported post type' })
+      }
+      
+      const result = await getSock(req).sendMessage(jid, payload)
+      res.json(result)
+    } catch (err) { next(err) }
+  })
+
   router.delete('/:jid', async (req, res, next) => {
     try {
       await getSock(req).newsletterDelete(req.params.jid)

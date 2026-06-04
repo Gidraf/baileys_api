@@ -247,6 +247,26 @@ const ENDPOINTS = [
         snippets: {
           python: 'import requests\nprint(requests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/call-link", json={"type": "video"}).json())'
         }
+      },
+      {
+        title: "Post Text Status (Story)",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/status/text",
+        description: "Post a plain text status update (story) visible to contacts.",
+        payload: '{\n  "text": "Hello, this is my status!",\n  "backgroundColor": "#00a884",\n  "font": 1,\n  "statusJidList": ["254XXXXXXXXX@s.whatsapp.net"]\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/status/text", json={\n  "text": "My text story",\n  "backgroundColor": "#00a884"\n})'
+        }
+      },
+      {
+        title: "Post Media Status (Story)",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/status/media",
+        description: "Post an image or video status update (story) with caption.",
+        payload: '{\n  "type": "image",\n  "url": "https://example.com/status.png",\n  "caption": "Check my story!",\n  "statusJidList": ["254XXXXXXXXX@s.whatsapp.net"]\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/status/media", json={\n  "type": "image",\n  "url": "https://...",\n  "caption": "My story caption"\n})'
+        }
       }
     ]
   },
@@ -444,6 +464,16 @@ const ENDPOINTS = [
         description: "Subscribes the WhatsApp account to follow the channel.",
         snippets: {
           python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter/120363@newsletter/follow")'
+        }
+      },
+      {
+        title: "Post to Newsletter",
+        method: "POST",
+        path: "/api/sessions/:sessionId/newsletter/:jid/post",
+        description: "Post text or media content directly to the newsletter channel. Supports type 'text', 'image', 'video', 'audio', and 'document'.",
+        payload: '{\n  "type": "text",\n  "text": "Hello, this is a post to my channel!",\n  "caption": "Optional caption for media",\n  "url": "https://example.com/image.png"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/newsletter/120363@newsletter/post", json={\n  "type": "text",\n  "text": "Hello Channel!"\n})'
         }
       }
     ]

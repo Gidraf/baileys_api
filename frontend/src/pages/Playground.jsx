@@ -82,6 +82,37 @@ const PLAYGROUND_ENDPOINTS = [
     }
   },
   {
+    id: 'newsletter-post',
+    label: 'Post to Newsletter / Channel',
+    path: 'newsletter/post',
+    defaultPayload: {
+      type: "text",
+      text: "Hello everyone, this is an update on our new features!",
+      caption: "Optional media caption",
+      url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe"
+    }
+  },
+  {
+    id: 'status-text',
+    label: 'Post Text Status (Story)',
+    path: 'status/text',
+    defaultPayload: {
+      text: "Hello, this is my text status on WhatsApp!",
+      backgroundColor: "#00a884",
+      font: 1
+    }
+  },
+  {
+    id: 'status-media',
+    label: 'Post Media Status (Story)',
+    path: 'status/media',
+    defaultPayload: {
+      type: "image",
+      url: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe",
+      caption: "Stunning status background!"
+    }
+  },
+  {
     id: 'interactive',
     label: 'Interactive Messages (Native Flow/Buttons/Carousel)',
     path: 'interactive',
@@ -272,6 +303,7 @@ const PLAYGROUND_ENDPOINTS = [
 export default function Playground() {
   const sessionId = localStorage.getItem('baileys_session') || '{SESSION_ID}';
   const [contacts, setContacts] = useState([]);
+  const [newsletters, setNewsletters] = useState([]);
   const [recipient, setRecipient] = useState('');
   
   const [activeEndpointId, setActiveEndpointId] = useState(PLAYGROUND_ENDPOINTS[0].id);
@@ -289,6 +321,7 @@ export default function Playground() {
 
   useEffect(() => {
     if (sessionId && sessionId !== '{SESSION_ID}') {
+      // Fetch contacts
       fetch(`/api/sessions/${sessionId}/profile/contacts`)
         .then(res => res.ok ? res.json() : [])
         .then(data => {
@@ -296,11 +329,32 @@ export default function Playground() {
             else if (data.data) setContacts(data.data);
             else setContacts(Object.values(data));
         }).catch(() => {});
+
+      // Fetch followed newsletters
+      fetch(`/api/sessions/${sessionId}/newsletter/subscribed`)
+        .then(res => res.ok ? res.json() : [])
+        .then(data => {
+            if (Array.isArray(data)) setNewsletters(data);
+            else if (data.data) setNewsletters(data.data);
+            else setNewsletters(Object.values(data));
+        }).catch(() => {});
     }
   }, [sessionId]);
 
   const activeEndpoint = PLAYGROUND_ENDPOINTS.find(e => e.id === activeEndpointId) || PLAYGROUND_ENDPOINTS[0];
-  const targetJid = recipient ? (recipient.includes('@') ? recipient : `${recipient}@s.whatsapp.net`) : "254XXXXXXXXX@s.whatsapp.net";
+  
+  const isNewsletterTarget = recipient?.endsWith('@newsletter') || activeEndpointId === 'newsletter-post';
+  
+  let defaultJid = "254XXXXXXXXX@s.whatsapp.net";
+  if (activeEndpointId === 'newsletter-post') {
+    defaultJid = (newsletters[0]?.id || newsletters[0]?.jid) || "120363XXXXXXXXXXXX@newsletter";
+  } else if (contacts.length > 0) {
+    defaultJid = contacts[0]?.id || contacts[0]?.jid || defaultJid;
+  }
+
+  const targetJid = recipient 
+    ? (recipient.includes('@') ? recipient : `${recipient}${isNewsletterTarget ? '@newsletter' : '@s.whatsapp.net'}`) 
+    : defaultJid;
 
   // When endpoint selection changes, populate default JSON payload
   const handleEndpointChange = (id) => {
@@ -322,11 +376,17 @@ export default function Playground() {
     }
   };
 
+  const isJidRequired = 
+    activeEndpoint.id !== 'call-link' && 
+    activeEndpoint.id !== 'presence' && 
+    activeEndpoint.id !== 'status-text' && 
+    activeEndpoint.id !== 'status-media';
+
   const getCombinedPayload = () => {
     try {
       const parsed = JSON.parse(jsonPayloadString);
       // Automatically merge JID if applicable
-      if (activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && !parsed.jid) {
+      if (isJidRequired && !parsed.jid) {
         parsed.jid = targetJid;
       }
       return parsed;
@@ -429,8 +489,8 @@ export default function Playground() {
               </select>
             </div>
 
-            {/* Contact Selector (only render if endpoint requires JID) */}
-            {activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && (
+            {/* Contact Selector */}
+            {isJidRequired && (
               <div>
                 <label className="block text-sm font-medium text-gray-400 mb-1">Recipient (Select or Type)</label>
                 <div className="flex flex-col space-y-2">
@@ -438,10 +498,17 @@ export default function Playground() {
                     onChange={e => setRecipient(e.target.value)}
                     className="w-full bg-[#111b21] border border-[#222d34] rounded-lg px-4 py-3 text-white focus:outline-none focus:border-[#25D366]"
                   >
-                    <option value="">-- Choose from Contacts --</option>
-                    {contacts.map((c, i) => (
-                      <option key={i} value={c.id || c.jid}>{c.name || c.notify || c.id || c.jid}</option>
-                    ))}
+                    <option value="">-- Choose from Contacts / Channels --</option>
+                    <optgroup label="Contacts">
+                      {contacts.map((c, i) => (
+                        <option key={i} value={c.id || c.jid}>{c.name || c.notify || c.id || c.jid}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Newsletters (Channels)">
+                      {newsletters.map((nl, i) => (
+                        <option key={i} value={nl.id || nl.jid}>{nl.name || nl.subject || nl.id || nl.jid}</option>
+                      ))}
+                    </optgroup>
                   </select>
                   <input 
                     type="text" 
@@ -483,7 +550,7 @@ export default function Playground() {
 
             <button 
               onClick={handleSendAction}
-              disabled={sending || (activeEndpoint.id !== 'call-link' && activeEndpoint.id !== 'presence' && !recipient) || sessionId === '{SESSION_ID}' || !!jsonError}
+              disabled={sending || (isJidRequired && !recipient) || sessionId === '{SESSION_ID}' || !!jsonError}
               className={`w-full text-white py-4 rounded-xl font-bold shadow-lg transition-colors flex items-center justify-center ${scheduleTime ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20' : 'bg-[#25D366] hover:bg-[#128C7E] shadow-[#25D366]/20'} disabled:opacity-50 disabled:cursor-not-allowed`}
             >
               {sending ? 'Processing...' : (scheduleTime ? 'Schedule Message' : 'Execute Request')}

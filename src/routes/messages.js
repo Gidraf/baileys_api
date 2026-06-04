@@ -112,10 +112,72 @@ export function createMessageRoutes(sm) {
   // ── Status / Story ──────────────────────────────────────────────────────────
   router.post('/status/text', async (req, res) => {
     try {
-      const { text, backgroundColor = '#000000', font = 1 } = req.body
+      const { text, backgroundColor = '#000000', font = 1, statusJidList } = req.body
       const msg = { text }
-      const opts = { backgroundColor, font }
+      
+      let jidList = statusJidList
+      if (typeof jidList === 'string') {
+        try { jidList = JSON.parse(jidList) } catch (e) {}
+      }
+      if (!jidList || !Array.isArray(jidList) || jidList.length === 0) {
+        const st = store(req)
+        jidList = st ? Object.keys(st.contacts || {}) : []
+      }
+      
+      const opts = { 
+        backgroundColor, 
+        font,
+        broadcast: true,
+        statusJidList: jidList
+      }
       const result = await sock(req).sendMessage('status@broadcast', msg, opts)
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  router.post('/status/media', upload.single('file'), async (req, res) => {
+    try {
+      const { type = 'image', caption, url, statusJidList } = req.body
+      const media = req.file ? req.file.buffer : { url }
+      const payload = { [type]: media, caption }
+      
+      let jidList = statusJidList
+      if (typeof jidList === 'string') {
+        try { jidList = JSON.parse(jidList) } catch (e) {}
+      }
+      if (!jidList || !Array.isArray(jidList) || jidList.length === 0) {
+        const st = store(req)
+        jidList = st ? Object.keys(st.contacts || {}) : []
+      }
+      
+      const opts = {
+        broadcast: true,
+        statusJidList: jidList
+      }
+      const result = await sock(req).sendMessage('status@broadcast', payload, opts)
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Newsletter / Channel Post ───────────────────────────────────────────────
+  router.post('/newsletter/post', upload.single('file'), async (req, res) => {
+    try {
+      const { jid, type = 'text', text, caption, url } = req.body
+      if (!jid || !jid.endsWith('@newsletter')) {
+        return res.status(400).json({ error: 'Valid newsletter JID is required' })
+      }
+      
+      let payload
+      if (type === 'text') {
+        payload = { text }
+      } else if (type === 'image' || type === 'video' || type === 'audio' || type === 'document') {
+        const media = req.file ? req.file.buffer : { url }
+        payload = { [type]: media, caption }
+      } else {
+        return res.status(400).json({ error: 'Unsupported post type' })
+      }
+      
+      const result = await sock(req).sendMessage(jid, payload)
       res.json(result)
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
