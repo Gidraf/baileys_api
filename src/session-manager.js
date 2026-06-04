@@ -4,7 +4,10 @@ import {
   DisconnectReason,
   delay,
   makeInMemoryStore,
+  decryptPollVote,
+  jidNormalizedUser,
 } from '@itsliaaa/baileys'
+import crypto from 'crypto'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import fs from 'fs'
@@ -69,6 +72,189 @@ async function releaseLock(sessionId) {
   if (!rc) return
   const owner = await rc.get(`session-lock:${sessionId}`)
   if (owner === INSTANCE_ID) await rc.del(`session-lock:${sessionId}`)
+}
+
+// ── Webhook Parsing Helper ──────────────────────────────────────────────────
+async function parseMessageForWebhooks(msg, store, sendWebhook) {
+  const content = msg.message;
+  if (!content) return;
+
+  // 1. Poll Update / Vote
+  if (content.pollUpdateMessage) {
+    const pollUpdate = content.pollUpdateMessage;
+    const creationMsgKey = pollUpdate.pollCreationMessageKey;
+    if (creationMsgKey) {
+      try {
+        const pollMsg = await store.loadMessage(creationMsgKey.remoteJid, creationMsgKey.id);
+        if (pollMsg) {
+          const pollEncKey = pollMsg.messageContextInfo?.messageSecret;
+          if (pollEncKey) {
+            const pollCreatorJid = jidNormalizedUser(creationMsgKey.participant || creationMsgKey.remoteJid);
+            const voterJid = jidNormalizedUser(msg.key.participant || msg.key.remoteJid);
+            
+            const decrypted = decryptPollVote(
+              pollUpdate.vote,
+              {
+                pollEncKey,
+                pollCreatorJid,
+                pollMsgId: creationMsgKey.id,
+                voterJid
+              }
+            );
+
+            if (decrypted && decrypted.selectedOptions) {
+              const selectedOptionsHex = decrypted.selectedOptions.map(h => Buffer.from(h).toString('hex'));
+              const pollCreationMsg = pollMsg.message?.pollCreationMessage || 
+                                     pollMsg.message?.pollCreationMessageV2 || 
+                                     pollMsg.message?.pollCreationMessageV3;
+              
+              const pollName = pollCreationMsg?.name || "";
+              const originalPollOptions = pollCreationMsg?.options?.map(o => o.optionName) || [];
+              
+              const selectedOptions = originalPollOptions.filter(opt => {
+                const optHash = crypto.createHash('sha256').update(opt).digest('hex');
+                return selectedOptionsHex.includes(optHash);
+              });
+
+              // Send poll.vote event
+              sendWebhook('poll.vote', {
+                pollJid: creationMsgKey.remoteJid,
+                pollId: creationMsgKey.id,
+                pollName,
+                voterJid,
+                selectedOptions,
+                selectedOptionsHashes: selectedOptionsHex,
+                timestamp: Number(pollUpdate.senderTimestampMs) || Date.now()
+              });
+
+              // Track in-memory poll updates for this poll message to generate results
+              if (!pollMsg.pollUpdates) pollMsg.pollUpdates = [];
+              const existingVoteIdx = pollMsg.pollUpdates.findIndex(v => v.pollUpdateMessageKey?.id === msg.key.id);
+              if (existingVoteIdx > -1) {
+                pollMsg.pollUpdates[existingVoteIdx] = {
+                  pollUpdateMessageKey: msg.key,
+                  vote: decrypted,
+                  senderTimestampMs: pollUpdate.senderTimestampMs
+                };
+              } else {
+                pollMsg.pollUpdates.push({
+                  pollUpdateMessageKey: msg.key,
+                  vote: decrypted,
+                  senderTimestampMs: pollUpdate.senderTimestampMs
+                });
+              }
+
+              // Compute results tally
+              const results = {};
+              originalPollOptions.forEach(opt => { results[opt] = 0; });
+              
+              const latestVotes = new Map();
+              pollMsg.pollUpdates.forEach(u => {
+                const voter = jidNormalizedUser(u.pollUpdateMessageKey.participant || u.pollUpdateMessageKey.remoteJid);
+                let decVote = u.vote;
+                if (decVote && !decVote.selectedOptions) {
+                  try {
+                    decVote = decryptPollVote(
+                      decVote,
+                      { pollEncKey, pollCreatorJid, pollMsgId: creationMsgKey.id, voterJid: voter }
+                    );
+                  } catch (e) {}
+                }
+                if (decVote && decVote.selectedOptions) {
+                  latestVotes.set(voter, decVote.selectedOptions.map(h => Buffer.from(h).toString('hex')));
+                }
+              });
+
+              let totalVotes = 0;
+              latestVotes.forEach((optsHex) => {
+                originalPollOptions.forEach(opt => {
+                  const optHash = crypto.createHash('sha256').update(opt).digest('hex');
+                  if (optsHex.includes(optHash)) {
+                    results[opt]++;
+                    totalVotes++;
+                  }
+                });
+              });
+
+              sendWebhook('poll.result', {
+                pollJid: creationMsgKey.remoteJid,
+                pollId: creationMsgKey.id,
+                pollName,
+                results,
+                totalVotes,
+                timestamp: Date.now()
+              });
+            }
+          }
+        }
+      } catch (err) {
+        console.error('[SessionManager] Failed to decrypt poll vote:', err.message);
+      }
+    }
+  }
+
+  // 2. Interactive Response Message (NativeFlow / Cards / Buttons)
+  const interactiveResponseMessage = content.interactiveResponseMessage;
+  if (interactiveResponseMessage) {
+    const nativeFlow = interactiveResponseMessage.nativeFlowResponseMessage;
+    if (nativeFlow) {
+      let parsedParams = null;
+      try { parsedParams = JSON.parse(nativeFlow.paramsJson); } catch (e) { parsedParams = nativeFlow.paramsJson; }
+      sendWebhook('interactive.response', {
+        jid: jidNormalizedUser(msg.key.participant || msg.key.remoteJid),
+        messageId: msg.key.id,
+        response: {
+          type: 'flow',
+          name: nativeFlow.name,
+          payload: parsedParams
+        }
+      });
+    }
+  }
+
+  // 3. Button Response Message (Quick Reply / Template buttons)
+  const buttonResponseMessage = content.buttonResponseMessage;
+  if (buttonResponseMessage) {
+    sendWebhook('interactive.response', {
+      jid: jidNormalizedUser(msg.key.participant || msg.key.remoteJid),
+      messageId: msg.key.id,
+      response: {
+        type: 'button',
+        buttonId: buttonResponseMessage.selectedButtonId,
+        displayText: buttonResponseMessage.selectedDisplayText
+      }
+    });
+  }
+
+  // 4. Template Button Reply Message
+  const templateButtonReplyMessage = content.templateButtonReplyMessage;
+  if (templateButtonReplyMessage) {
+    sendWebhook('interactive.response', {
+      jid: jidNormalizedUser(msg.key.participant || msg.key.remoteJid),
+      messageId: msg.key.id,
+      response: {
+        type: 'template',
+        buttonId: templateButtonReplyMessage.selectedId,
+        displayText: templateButtonReplyMessage.selectedDisplayText,
+        index: templateButtonReplyMessage.selectedIndex
+      }
+    });
+  }
+
+  // 5. List Response Message (Menu Lists)
+  const listResponseMessage = content.listResponseMessage;
+  if (listResponseMessage) {
+    sendWebhook('interactive.response', {
+      jid: jidNormalizedUser(msg.key.participant || msg.key.remoteJid),
+      messageId: msg.key.id,
+      response: {
+        type: 'list',
+        buttonId: listResponseMessage.singleSelectReply?.selectedRowId,
+        title: listResponseMessage.title,
+        description: listResponseMessage.description
+      }
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -310,7 +496,7 @@ export class SessionManager {
         // ── Forward ALL Baileys events to webhook ──────────────────────────
         // We do this via ev.process so we get everything, but we ALSO
         // handle connection.update separately below to convert QR to dataURL.
-        sock.ev.process((events) => {
+        sock.ev.process(async (events) => {
           for (const [event, data] of Object.entries(events)) {
             if (event === 'connection.update') continue;
 
@@ -322,6 +508,9 @@ export class SessionManager {
               for (const msg of data.messages) {
                 // Optional: skip messages sent by the bot itself to prevent infinite auto-reply loops
                 if (msg.key.fromMe) continue;
+                
+                // Parse messages for custom events (votes, interactive button replies)
+                await parseMessageForWebhooks(msg, store, sendWebhook);
                 
                 sendWebhook('messages.upsert', { ...data, messages: [msg] })
               }

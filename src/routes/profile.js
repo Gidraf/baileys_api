@@ -127,10 +127,50 @@ export function createProfileRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
+  router.delete('/label/message', async (req, res, next) => {
+    try {
+      const { jid, messageId, labelId } = req.body
+      await getSock(req).removeMessageLabel(jid, messageId, labelId)
+      res.json({ success: true })
+    } catch (err) { next(err) }
+  })
+
   // Get business profile
   router.get('/business', async (req, res, next) => {
     try {
       const result = await getSock(req).getBusinessProfile(req.query.jid)
+      res.json(result)
+    } catch (err) { next(err) }
+  })
+
+  // Check if numbers are registered on WhatsApp
+  router.post('/on-whatsapp', async (req, res, next) => {
+    try {
+      const { numbers } = req.body
+      if (!numbers || !Array.isArray(numbers)) {
+        return res.status(400).json({ error: "numbers must be an array of strings" })
+      }
+      const result = await getSock(req).onWhatsApp(...numbers)
+      res.json(result)
+    } catch (err) { next(err) }
+  })
+
+  // Get contact status/about
+  router.get('/status', async (req, res, next) => {
+    try {
+      const { jid } = req.query
+      if (!jid) return res.status(400).json({ error: "jid is required" })
+      const result = await getSock(req).fetchStatus(jid)
+      res.json(result)
+    } catch (err) { next(err) }
+  })
+
+  // Get contact disappearing duration
+  router.get('/disappearing-duration', async (req, res, next) => {
+    try {
+      const { jid } = req.query
+      if (!jid) return res.status(400).json({ error: "jid is required" })
+      const result = await getSock(req).fetchDisappearingDuration(jid)
       res.json(result)
     } catch (err) { next(err) }
   })

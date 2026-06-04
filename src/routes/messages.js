@@ -440,6 +440,74 @@ export function createMessageRoutes(sm) {
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
 
+  // ── Media: Sticker Pack ───────────────────────────────────────────────────────
+  router.post('/sticker-pack', async (req, res) => {
+    try {
+      const { jid, stickers, cover, name, publisher, description, quoted } = req.body
+      const payload = {
+        stickers,
+        cover,
+        ...(name && { name }),
+        ...(publisher && { publisher }),
+        ...(description && { description })
+      }
+      const q = quoted ? (typeof quoted === 'string' ? JSON.parse(quoted) : quoted) : undefined
+      const result = await sock(req).sendMessage(jid, payload, q ? { quoted: q } : {})
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Product / Catalog ─────────────────────────────────────────────────────────
+  router.post('/product', async (req, res) => {
+    try {
+      const { jid, product, businessOwnerJid, image, quoted } = req.body
+      const payload = {
+        product,
+        businessOwnerJid,
+        image
+      }
+      const q = quoted ? (typeof quoted === 'string' ? JSON.parse(quoted) : quoted) : undefined
+      const result = await sock(req).sendMessage(jid, payload, q ? { quoted: q } : {})
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Modify Message (Edit/Delete) ──────────────────────────────────────────────
+  router.post('/modify', async (req, res) => {
+    try {
+      const { jid, type, messageKey, text, caption } = req.body
+      if (type === 'delete') {
+        const result = await sock(req).sendMessage(jid, { delete: messageKey })
+        return res.json(result)
+      } else if (type === 'edit') {
+        const msg = { edit: messageKey, ...(text && { text }), ...(caption && { caption }) }
+        const result = await sock(req).sendMessage(jid, msg)
+        return res.json(result)
+      } else {
+        return res.status(400).json({ error: "Invalid modification type. Must be 'edit' or 'delete'." })
+      }
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── View Once Media ───────────────────────────────────────────────────────────
+  router.post('/view-once', upload.single('file'), async (req, res) => {
+    try {
+      const { jid, type = 'image', caption, url, viewOnceType = 'viewOnceV2', ephemeral, quoted } = req.body
+      const media = req.file ? req.file.buffer : { url }
+      
+      const payload = {
+        [type]: media,
+        caption,
+        [viewOnceType]: true,
+        ...(ephemeral && { ephemeral: true })
+      }
+      
+      const q = quoted ? (typeof quoted === 'string' ? JSON.parse(quoted) : quoted) : undefined
+      const result = await sock(req).sendMessage(jid, payload, q ? { quoted: q } : {})
+      res.json(result)
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
   // ── Payment ───────────────────────────────────────────────────────────────────
   router.post('/payment-invite', async (req, res) => {
     try {
@@ -472,6 +540,27 @@ export function createMessageRoutes(sm) {
       const { jid, type = 'available' } = req.body
       await sock(req).sendPresenceUpdate(type, jid)
       res.json({ success: true })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Star Messages ─────────────────────────────────────────────────────────────
+  router.post('/star', async (req, res) => {
+    try {
+      const { jid, messageKeys, star } = req.body
+      if (!jid || !messageKeys || !Array.isArray(messageKeys)) {
+        return res.status(400).json({ error: "jid and messageKeys (array) are required" })
+      }
+      await sock(req).star(jid, messageKeys, star === true)
+      res.json({ success: true })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  // ── Create Call Link ──────────────────────────────────────────────────────────
+  router.post('/call-link', async (req, res) => {
+    try {
+      const { type = 'video', startTime, timeoutMs } = req.body
+      const result = await sock(req).createCallLink(type, { startTime: startTime ? new Date(startTime) : undefined }, timeoutMs)
+      res.json({ link: result })
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
 
