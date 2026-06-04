@@ -225,8 +225,12 @@ export function createMessageRoutes(sm) {
     try {
       const { jid, event, quoted } = req.body
       if (event) {
-        if (event.startTime) event.startTime = new Date(event.startTime)
-        if (event.endTime) event.endTime = new Date(event.endTime)
+        const start = event.startDate || event.startTime
+        const end = event.endDate || event.endTime
+        if (start) event.startDate = new Date(start)
+        if (end) event.endDate = new Date(end)
+        delete event.startTime
+        delete event.endTime
       }
       const result = await sock(req).sendMessage(jid, { event }, quoted ? { quoted } : {})
       res.json(result)
@@ -307,6 +311,8 @@ export function createMessageRoutes(sm) {
       const body = req.body
       const payload = { ...body }
       if (req.file) payload.image = req.file.buffer
+      else if (payload.image && typeof payload.image === 'string') payload.image = { url: payload.image }
+
       ;['nativeFlow','cards','buttons','sections'].forEach(k => {
         if (payload[k] && typeof payload[k] === 'string') payload[k] = JSON.parse(payload[k])
       })
@@ -323,6 +329,8 @@ export function createMessageRoutes(sm) {
       const body = req.body
       const payload = { ...body }
       if (req.file) payload.image = req.file.buffer
+      else if (payload.image && typeof payload.image === 'string') payload.image = { url: payload.image }
+
       if (payload.templateButtons && typeof payload.templateButtons === 'string')
         payload.templateButtons = JSON.parse(payload.templateButtons)
       const quoted = payload.quoted ? (typeof payload.quoted === 'string' ? JSON.parse(payload.quoted) : payload.quoted) : undefined
@@ -435,7 +443,25 @@ export function createMessageRoutes(sm) {
   router.post('/album', async (req, res) => {
     try {
       const { jid, album, quoted } = req.body
-      const result = await sock(req).sendMessage(jid, { album }, quoted ? { quoted } : {})
+      let albumPayload = album
+      if (album && !Array.isArray(album) && Array.isArray(album.items)) {
+        albumPayload = album.items
+      }
+      
+      if (Array.isArray(albumPayload)) {
+        albumPayload = albumPayload.map(item => {
+          const newItem = { ...item }
+          if (newItem.image && typeof newItem.image === 'string') {
+            newItem.image = { url: newItem.image }
+          }
+          if (newItem.video && typeof newItem.video === 'string') {
+            newItem.video = { url: newItem.video }
+          }
+          return newItem
+        })
+      }
+
+      const result = await sock(req).sendMessage(jid, { album: albumPayload }, quoted ? { quoted } : {})
       res.json(result)
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
@@ -444,9 +470,15 @@ export function createMessageRoutes(sm) {
   router.post('/sticker-pack', async (req, res) => {
     try {
       const { jid, stickers, cover, name, publisher, description, quoted } = req.body
+      
+      const mappedStickers = Array.isArray(stickers) ? stickers.map(s => ({
+        ...s,
+        data: typeof s.data === 'string' ? { url: s.data } : s.data
+      })) : []
+
       const payload = {
-        stickers,
-        cover,
+        stickers: mappedStickers,
+        cover: typeof cover === 'string' ? { url: cover } : cover,
         ...(name && { name }),
         ...(publisher && { publisher }),
         ...(description && { description })
@@ -464,7 +496,7 @@ export function createMessageRoutes(sm) {
       const payload = {
         product,
         businessOwnerJid,
-        image
+        image: typeof image === 'string' ? { url: image } : image
       }
       const q = quoted ? (typeof quoted === 'string' ? JSON.parse(quoted) : quoted) : undefined
       const result = await sock(req).sendMessage(jid, payload, q ? { quoted: q } : {})
