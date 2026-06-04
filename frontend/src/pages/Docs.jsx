@@ -229,6 +229,16 @@ const ENDPOINTS = [
         }
       },
       {
+        title: "Send Message Receipt",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/receipt",
+        description: "Send a read/delivered receipt for specific messages.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "participant": "254XXXXXXXXX@s.whatsapp.net",\n  "messageIds": ["MSG_ID_123"],\n  "type": "read"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/receipt", json={\n  "jid": "...",\n  "messageIds": ["..."],\n  "type": "read"\n})'
+        }
+      },
+      {
         title: "Send Presence Update",
         method: "POST",
         path: "/api/sessions/:sessionId/messages/presence",
@@ -236,6 +246,16 @@ const ENDPOINTS = [
         payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net",\n  "type": "composing"\n}',
         snippets: {
           python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/presence", json={"jid": "...", "type": "composing"})'
+        }
+      },
+      {
+        title: "Presence Subscribe",
+        method: "POST",
+        path: "/api/sessions/:sessionId/messages/presence/subscribe",
+        description: "Subscribe to presence updates (online status, typing status) for a specific user.",
+        payload: '{\n  "jid": "254XXXXXXXXX@s.whatsapp.net"\n}',
+        snippets: {
+          python: 'import requests\nrequests.post("https://wabot.gidraf.dev/api/sessions/my-session/messages/presence/subscribe", json={"jid": "..."})'
         }
       },
       {
@@ -517,6 +537,16 @@ const ENDPOINTS = [
         description: "Query cached and sync'd contact objects from store memory.",
         snippets: {
           python: 'print(requests.get("https://wabot.gidraf.dev/api/sessions/my-session/profile/contacts").json())'
+        }
+      },
+      {
+        title: "Resync App State",
+        method: "POST",
+        path: "/api/sessions/:sessionId/profile/resync-app-state",
+        description: "Manually trigger synchronization for app state collections like blocklists, archives, etc.",
+        payload: '{\n  "collections": ["regular", "critical_block"],\n  "isInitialSync": true\n}',
+        snippets: {
+          python: 'requests.post("https://wabot.gidraf.dev/api/sessions/my-session/profile/resync-app-state", json={"collections": ["regular", "critical_block"]})'
         }
       }
     ]

@@ -297,6 +297,177 @@ const PLAYGROUND_ENDPOINTS = [
     defaultPayload: {
       type: "composing"
     }
+  },
+  {
+    id: 'presence-subscribe',
+    label: 'Presence Subscribe',
+    path: 'presence/subscribe',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net"
+    }
+  },
+  {
+    id: 'receipt',
+    label: 'Send Message Receipt',
+    path: 'receipt',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      participant: "2547XXXXXXXX@s.whatsapp.net",
+      messageIds: ["MSG_ID_ABC"],
+      type: "read"
+    }
+  },
+  {
+    id: 'resync-app-state',
+    label: 'Resync App State',
+    path: 'profile/resync-app-state',
+    defaultPayload: {
+      collections: ["regular", "critical_block"],
+      isInitialSync: true
+    }
+  },
+  {
+    id: 'profile-picture-get',
+    label: 'Get Profile Picture URL',
+    path: 'profile/picture',
+    method: 'GET',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      type: "image"
+    }
+  },
+  {
+    id: 'profile-picture-update',
+    label: 'Update Profile Picture',
+    path: 'profile/picture',
+    method: 'PUT',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      url: "https://wabot.gidraf.dev/assets/logo.png"
+    }
+  },
+  {
+    id: 'profile-picture-remove',
+    label: 'Remove Profile Picture',
+    path: 'profile/picture',
+    method: 'DELETE',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net"
+    }
+  },
+  {
+    id: 'profile-name-update',
+    label: 'Update Profile Name',
+    path: 'profile/name',
+    method: 'PATCH',
+    defaultPayload: {
+      name: "My New Name"
+    }
+  },
+  {
+    id: 'profile-status-update',
+    label: 'Update Profile Status',
+    path: 'profile/status',
+    method: 'PATCH',
+    defaultPayload: {
+      status: "Available"
+    }
+  },
+  {
+    id: 'profile-block-status',
+    label: 'Update Block Status',
+    path: 'profile/block',
+    method: 'PATCH',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      action: "block"
+    }
+  },
+  {
+    id: 'profile-blocklist-get',
+    label: 'Fetch Blocklist',
+    path: 'profile/blocklist',
+    method: 'GET',
+    defaultPayload: {}
+  },
+  {
+    id: 'profile-chat-modify',
+    label: 'Modify Chat',
+    path: 'profile/chat',
+    method: 'PATCH',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      modifications: {
+        archive: true
+      }
+    }
+  },
+  {
+    id: 'profile-contact-add',
+    label: 'Add/Edit Contact',
+    path: 'profile/contact',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      displayName: "Starseed"
+    }
+  },
+  {
+    id: 'profile-contact-remove',
+    label: 'Remove Contact',
+    path: 'profile/contact',
+    method: 'DELETE',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net"
+    }
+  },
+  {
+    id: 'profile-label-chat-add',
+    label: 'Add Chat Label',
+    path: 'profile/label/chat',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      labelId: "1"
+    }
+  },
+  {
+    id: 'profile-label-chat-remove',
+    label: 'Remove Chat Label',
+    path: 'profile/label/chat',
+    method: 'DELETE',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      labelId: "1"
+    }
+  },
+  {
+    id: 'profile-label-message-add',
+    label: 'Add Message Label',
+    path: 'profile/label/message',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      messageId: "MSG_ID_ABC",
+      labelId: "1"
+    }
+  },
+  {
+    id: 'profile-label-message-remove',
+    label: 'Remove Message Label',
+    path: 'profile/label/message',
+    method: 'DELETE',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net",
+      messageId: "MSG_ID_ABC",
+      labelId: "1"
+    }
+  },
+  {
+    id: 'profile-business-get',
+    label: 'Get Business Profile',
+    path: 'profile/business',
+    method: 'GET',
+    defaultPayload: {
+      jid: "2547XXXXXXXX@s.whatsapp.net"
+    }
   }
 ];
 
@@ -376,11 +547,16 @@ export default function Playground() {
     }
   };
 
-  const isJidRequired = 
-    activeEndpoint.id !== 'call-link' && 
-    activeEndpoint.id !== 'presence' && 
-    activeEndpoint.id !== 'status-text' && 
-    activeEndpoint.id !== 'status-media';
+  const isJidRequired = ![
+    'call-link',
+    'presence',
+    'status-text',
+    'status-media',
+    'profile-blocklist-get',
+    'profile-name-update',
+    'profile-status-update',
+    'resync-app-state'
+  ].includes(activeEndpoint.id);
 
   const getCombinedPayload = () => {
     try {
@@ -395,24 +571,59 @@ export default function Playground() {
     }
   };
 
+  const resolveEndpointPath = (path) => {
+    return path.includes('/') ? path : `messages/${path}`;
+  };
+
   const getEndpointUrl = () => {
-    return `https://wabot.gidraf.dev/api/sessions/${sessionId}/messages/${activeEndpoint.path}`;
+    const relativePath = resolveEndpointPath(activeEndpoint.path);
+    let url = `${window.location.origin}/api/sessions/${sessionId}/${relativePath}`;
+    if (activeEndpoint.method === 'GET') {
+      const payload = getCombinedPayload();
+      const params = new URLSearchParams();
+      Object.entries(payload).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && k !== 'jid') params.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+      });
+      if (payload.jid) params.append('jid', payload.jid);
+      const q = params.toString();
+      if (q) url += `?${q}`;
+    }
+    return url;
   };
 
   const snippets = {
-    python: `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getCombinedPayload(), null, 2)}\n\nresponse = requests.post(url, json=payload)\nprint(response.json())`,
-    javascript: `fetch("${getEndpointUrl()}", {\n  method: "POST",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${JSON.stringify(getCombinedPayload(), null, 2).replace(/\n/g, '\n  ')})\n})\n.then(res => res.json())\n.then(console.log);`,
-    go: `// Execute HTTP POST to ${getEndpointUrl()}\n// With payload: ${JSON.stringify(getCombinedPayload())}`
+    python: activeEndpoint.method === 'GET'
+      ? `import requests\n\nurl = "${getEndpointUrl()}"\n\nresponse = requests.get(url)\nprint(response.json())`
+      : `import requests\n\nurl = "${getEndpointUrl()}"\npayload = ${JSON.stringify(getCombinedPayload(), null, 2)}\n\nresponse = requests.${(activeEndpoint.method || 'post').toLowerCase()}(url, json=payload)\nprint(response.json())`,
+    javascript: activeEndpoint.method === 'GET'
+      ? `fetch("${getEndpointUrl()}")\n.then(res => res.json())\n.then(console.log);`
+      : `fetch("${getEndpointUrl()}", {\n  method: "${activeEndpoint.method || 'POST'}",\n  headers: { "Content-Type": "application/json" },\n  body: JSON.stringify(${JSON.stringify(getCombinedPayload(), null, 2).replace(/\n/g, '\n  ')})\n})\n.then(res => res.json())\n.then(console.log);`,
+    go: `// Execute HTTP ${activeEndpoint.method || 'POST'} to ${getEndpointUrl()}\n// With payload: ${JSON.stringify(getCombinedPayload())}`
   };
 
   const executeApi = async (payload) => {
     setSending(true);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/messages/${activeEndpoint.path}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      const method = activeEndpoint.method || 'POST';
+      const relativePath = resolveEndpointPath(activeEndpoint.path);
+      let url = `/api/sessions/${sessionId}/${relativePath}`;
+      const options = {
+        method,
+        headers: { 'Content-Type': 'application/json' }
+      };
+
+      if (method === 'GET') {
+        const params = new URLSearchParams();
+        Object.entries(payload).forEach(([k, v]) => {
+          if (v !== undefined && v !== null) params.append(k, typeof v === 'object' ? JSON.stringify(v) : v);
+        });
+        const q = params.toString();
+        if (q) url += `?${q}`;
+      } else {
+        options.body = JSON.stringify(payload);
+      }
+
+      const res = await fetch(url, options);
       const data = await res.json();
       setResponse(data);
     } catch (err) {

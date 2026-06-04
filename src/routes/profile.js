@@ -175,5 +175,14 @@ export function createProfileRoutes(sessionManager, upload) {
     } catch (err) { next(err) }
   })
 
+  // App state sync
+  router.post('/resync-app-state', async (req, res, next) => {
+    try {
+      const { collections = ['regular', 'critical_block'], isInitialSync = true } = req.body
+      await getSock(req).resyncAppState(collections, isInitialSync)
+      res.json({ success: true })
+    } catch (err) { next(err) }
+  })
+
   return router
 }

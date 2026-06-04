@@ -628,11 +628,31 @@ export function createMessageRoutes(sm) {
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
 
+  router.post('/receipt', async (req, res) => {
+    try {
+      const { jid, participant, messageIds, type = 'read' } = req.body
+      if (!jid || !messageIds || !Array.isArray(messageIds)) {
+        return res.status(400).json({ error: "jid and messageIds (array) are required" })
+      }
+      await sock(req).sendReceipt(jid, participant, messageIds, type)
+      res.json({ success: true })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
   // ── Presence ──────────────────────────────────────────────────────────────────
   router.post('/presence', async (req, res) => {
     try {
       const { jid, type = 'available' } = req.body
       await sock(req).sendPresenceUpdate(type, jid)
+      res.json({ success: true })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
+  router.post('/presence/subscribe', async (req, res) => {
+    try {
+      const { jid } = req.body
+      if (!jid) return res.status(400).json({ error: "jid is required" })
+      await sock(req).presenceSubscribe(jid)
       res.json({ success: true })
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
