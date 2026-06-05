@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Terminal, Key, FileText, CheckCircle2, Clock, Calendar, ListTodo, Image as ImageIcon, Code } from 'lucide-react';
+import { Send, Terminal, Key, Clock} from 'lucide-react';
 import CodeSnippet from '../components/CodeSnippet';
 
 const PLAYGROUND_ENDPOINTS = [
