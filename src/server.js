@@ -9,6 +9,9 @@ import { createNewsletterRoutes } from './routes/newsletter.js'
 import { createBusinessRoutes } from './routes/business.js'
 import { createPrivacyRoutes } from './routes/privacy.js'
 import { createCommunityRoutes } from './routes/community.js'
+import { createWebhookRoutes } from './routes/webhooks.js'
+import AntiBan, { getStats as antibanStats } from './antiban.js'
+import { getPool as getTsProxyPool } from './proxy-pool.js'
 
 const app = express()
 const PORT = process.env.PORT || 21465
@@ -74,6 +77,39 @@ apiRouter.use('/sessions/:sessionId/newsletter', createNewsletterRoutes(sessionM
 apiRouter.use('/sessions/:sessionId/business',   createBusinessRoutes(sessionManager, upload))
 apiRouter.use('/sessions/:sessionId/privacy',    createPrivacyRoutes(sessionManager))
 apiRouter.use('/sessions/:sessionId/community',  createCommunityRoutes(sessionManager))
+
+// ─── Webhook Management ───────────────────────────────────────────────────────
+apiRouter.use('/webhooks', createWebhookRoutes(sessionManager))
+
+// ─── AntiBan Stats ───────────────────────────────────────────────────────────
+apiRouter.get('/sessions/:sessionId/antiban', async (req, res) => {
+  try {
+    const stats = await antibanStats(req.params.sessionId)
+    res.json(stats)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// ─── Proxy Pool (Tailscale) ───────────────────────────────────────────────────
+apiRouter.get('/proxy/pool', (_req, res) => {
+  try { res.json(getTsProxyPool().status()) }
+  catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+apiRouter.post('/proxy/pool/refresh', async (_req, res) => {
+  try {
+    await getTsProxyPool().forceRefresh()
+    res.json({ refreshed: true, ...getTsProxyPool().status() })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+apiRouter.delete('/proxy/pool/pin/:sessionId', (req, res) => {
+  try {
+    getTsProxyPool().unpin(req.params.sessionId)
+    res.json({ unpinned: req.params.sessionId })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
 
 app.use('/api', apiRouter)
 

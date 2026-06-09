@@ -4,8 +4,9 @@ import Dashboard from './pages/Dashboard';
 import Chats from './pages/Chats';
 import Playground from './pages/Playground';
 import Docs from './pages/Docs';
+import WebhookPlayground from './pages/WebhookPlayground';
 import Hero from './components/Hero';
-import { MessageSquare, LayoutDashboard, Terminal, AlertTriangle, BookOpen } from 'lucide-react';
+import { MessageSquare, LayoutDashboard, Terminal, AlertTriangle, BookOpen, Webhook } from 'lucide-react';
 
 export default function App() {
   return (
@@ -31,6 +32,10 @@ export default function App() {
             <Link to="/playground" className="flex items-center space-x-2 hover:text-[#25D366] transition-colors">
               <Terminal className="w-5 h-5" />
               <span className="hidden sm:block">API Playground</span>
+            </Link>
+            <Link to="/webhooks" className="flex items-center space-x-2 hover:text-[#25D366] transition-colors">
+              <Webhook className="w-5 h-5" />
+              <span className="hidden sm:block">Webhooks</span>
             </Link>
             <Link to="/docs" className="flex items-center space-x-2 hover:text-[#25D366] transition-colors">
               <BookOpen className="w-5 h-5" />
@@ -61,6 +66,7 @@ export default function App() {
             } />
             <Route path="/chats" element={<Chats />} />
             <Route path="/playground" element={<Playground />} />
+            <Route path="/webhooks" element={<WebhookPlayground />} />
             <Route path="/docs" element={<Docs />} />
           </Routes>
         </main>

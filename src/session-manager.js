@@ -14,6 +14,17 @@ import fs from 'fs'
 import path from 'path'
 import qrcode from 'qrcode'
 import { createClient } from 'redis'
+import AntiBan, { startPresenceCycling, stopPresenceCycling } from './antiban.js'
+
+// Lazy-import to break circular dep (webhooks imports session-manager indirectly)
+let _recordWebhookEvent = null
+async function getRecordWebhookEvent() {
+  if (!_recordWebhookEvent) {
+    const mod = await import('./routes/webhooks.js')
+    _recordWebhookEvent = mod.recordWebhookEvent
+  }
+  return _recordWebhookEvent
+}
 
 const SESSIONS_DIR  = process.env.SESSIONS_DIR  || './sessions'
 const REDIS_URL     = process.env.REDIS_URL     || 'redis://redis:6379'
@@ -451,6 +462,8 @@ export class SessionManager {
     const sendWebhook = (event, data) => {
       sessionData.webhookQueue.push({ event, data })
       processWebhookQueue()
+      // Also push to SSE event stream (playground viewer) — fire and forget
+      getRecordWebhookEvent().then(fn => { try { fn(sessionId, event, data) } catch {} }).catch(() => {})
     }
 
     const processWebhookQueue = async () => {
@@ -600,6 +613,8 @@ export class SessionManager {
             sessionData.phone       = sock.authState.creds.me?.id || phoneNumber || null
             console.log(`[${sessionId}] ✅ Connected as ${sessionData.phone}`)
             sendWebhook('connected', { user: sock.authState.creds.me })
+            // Start antiban presence cycling
+            startPresenceCycling(sock, sessionId)
 
           } else if (connection === 'close') {
             const code       = new Boom(lastDisconnect?.error)?.output?.statusCode
@@ -683,6 +698,7 @@ export class SessionManager {
     if (s.storeInterval) clearInterval(s.storeInterval)
     if (s.lockRenewer) clearInterval(s.lockRenewer)
     if (s.sock) { try { s.sock.end() } catch {} }
+    stopPresenceCycling(sessionId)
     releaseLock(sessionId)
     this.sessions.delete(sessionId)
   }
