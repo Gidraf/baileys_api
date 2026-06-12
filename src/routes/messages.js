@@ -2,8 +2,10 @@ import { Router } from 'express'
 import multer from 'multer'
 import fs from 'fs'
 import { sanitizeJid, isValidJid } from '../utils/jid.js'
+import { resolveMedia, guessMime } from '../utils/media.js'
 
-const upload = multer({ storage: multer.memoryStorage() })
+// 200 MB limit for campaign video uploads
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } })
 
 export function createMessageRoutes(sm) {
   const router = Router({ mergeParams: true })
@@ -424,7 +426,8 @@ export function createMessageRoutes(sm) {
     try {
       const { jid, caption, url, viewOnce, ai, spoiler, ephemeral } = req.body
       const quoted = req.body.quoted ? JSON.parse(req.body.quoted) : undefined
-      const image = req.file ? req.file.buffer : { url }
+      const image = await resolveMedia(req.file, url)
+      if (!image) return res.status(400).json({ error: 'No file or url provided' })
       const opts = { caption, ...(viewOnce && { viewOnce: true }), ...(ai && { ai: true }), ...(spoiler && { spoiler: true }), ...(ephemeral && { ephemeral: true }) }
       const result = await sock(req).sendMessage(jid, { image, ...opts }, quoted ? { quoted } : {})
       res.json(result)
@@ -436,7 +439,8 @@ export function createMessageRoutes(sm) {
     try {
       const { jid, caption, url, gifPlayback, ptv, viewOnce, ephemeral } = req.body
       const quoted = req.body.quoted ? JSON.parse(req.body.quoted) : undefined
-      const video = req.file ? req.file.buffer : { url }
+      const video = await resolveMedia(req.file, url)
+      if (!video) return res.status(400).json({ error: 'No file or url provided' })
       const result = await sock(req).sendMessage(jid, {
         video, caption,
         ...(gifPlayback && { gifPlayback: true }),
@@ -453,7 +457,8 @@ export function createMessageRoutes(sm) {
     try {
       const { jid, url, ptt } = req.body
       const quoted = req.body.quoted ? JSON.parse(req.body.quoted) : undefined
-      const audio = req.file ? req.file.buffer : { url }
+      const audio = await resolveMedia(req.file, url)
+      if (!audio) return res.status(400).json({ error: 'No file or url provided' })
       const result = await sock(req).sendMessage(jid, { audio, ptt: ptt === 'true' }, quoted ? { quoted } : {})
       res.json(result)
     } catch (e) { res.status(500).json({ error: e.message }) }
@@ -473,10 +478,13 @@ export function createMessageRoutes(sm) {
   // ── Media: Document ───────────────────────────────────────────────────────────
   router.post('/document', upload.single('file'), async (req, res) => {
     try {
-      const { jid, url, mimetype = 'application/octet-stream', caption, fileName } = req.body
-      console.log(`[API] Received /document request for ${jid} (${fileName})`)
+      const { jid, url, caption, fileName } = req.body
+      let { mimetype } = req.body
+      if (!mimetype) mimetype = req.file ? (req.file.mimetype || 'application/octet-stream') : guessMime(url || fileName || '', 'application/octet-stream')
+      console.log(`[API] Received /document request for ${jid} (${fileName}) mime=${mimetype}`)
       const quoted = req.body.quoted ? JSON.parse(req.body.quoted) : undefined
-      const document = req.file ? req.file.buffer : { url }
+      const document = await resolveMedia(req.file, url)
+      if (!document) return res.status(400).json({ error: 'No file or url provided' })
       const result = await sock(req).sendMessage(jid, { document, mimetype, caption, fileName }, quoted ? { quoted } : {})
       res.json(result)
     } catch (e) { res.status(500).json({ error: e.message }) }
