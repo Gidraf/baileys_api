@@ -658,6 +658,18 @@ export function createMessageRoutes(sm) {
     } catch (e) { res.status(500).json({ error: e.message }) }
   })
 
+  // ── Resolve JID / find LID for a phone number ────────────────────────────────
+  // POST body: { jid: "2547XXXXXXXX@s.whatsapp.net" } or { jid: "XXX@lid" }
+  // Returns: { phoneNumber, lid }  (lid may be undefined if not found)
+  router.post('/find-user-id', async (req, res) => {
+    try {
+      const { jid } = req.body
+      if (!jid) return res.status(400).json({ error: 'jid required' })
+      const ids = await sock(req).findUserId(jid)
+      res.json(ids || { phoneNumber: jid, lid: undefined })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
   // ── Create Call Link ──────────────────────────────────────────────────────────
   router.post('/call-link', async (req, res) => {
     try {
