@@ -780,4 +780,44 @@ export class SessionManager {
     
     return deletedSessions
   }
+
+  async clearAllSessions() {
+    const deletedSessions = []
+    
+    // 1. Get all session IDs from memory and disk
+    const sessionIds = new Set(this.sessions.keys())
+    try {
+      if (fs.existsSync(SESSIONS_DIR)) {
+        const dirs = fs.readdirSync(SESSIONS_DIR)
+        for (const dir of dirs) {
+          const p = path.join(SESSIONS_DIR, dir)
+          if (fs.statSync(p).isDirectory()) {
+            sessionIds.add(dir)
+          }
+        }
+      }
+    } catch (e) {
+      console.error('[SessionManager] Failed to read sessions dir for clear-all:', e.message)
+    }
+
+    // 2. Clean up and delete each session
+    for (const sessionId of sessionIds) {
+      console.log(`[SessionManager] Forcing cleanup of session: ${sessionId}`)
+      const activeSession = this.sessions.get(sessionId)
+      if (activeSession) {
+        if (activeSession.sock) { try { await activeSession.sock.logout() } catch {} }
+        this._cleanup(sessionId)
+      }
+      // Clean up lock in Redis
+      try { await releaseLock(sessionId) } catch {}
+
+      // Clean up files on disk
+      const sessionDir = path.join(SESSIONS_DIR, sessionId)
+      try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+      
+      deletedSessions.push(sessionId)
+    }
+
+    return deletedSessions
+  }
 }

@@ -54,6 +54,15 @@ apiRouter.get('/sessions/:sessionId', (req, res) => {
   res.json(info)
 })
 
+apiRouter.delete('/sessions', async (_req, res) => {
+  try {
+    const deleted = await sessionManager.clearAllSessions()
+    res.json({ success: true, deletedCount: deleted.length, sessions: deleted })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 apiRouter.delete('/sessions/partner/:partnerId', async (req, res) => {
   try {
     const deleted = await sessionManager.removePartnerSessions(req.params.partnerId)
