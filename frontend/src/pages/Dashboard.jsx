@@ -8,6 +8,9 @@ export default function Dashboard() {
   const [qrCode, setQrCode] = useState(null);
   const [loading, setLoading] = useState(false);
   const [phoneInfo, setPhoneInfo] = useState(null);
+  const [partnerId, setPartnerId] = useState('');
+  const [deletingPartner, setDeletingPartner] = useState(false);
+  const [partnerResult, setPartnerResult] = useState(null);
   
   const pollInterval = useRef(null);
 
@@ -93,6 +96,34 @@ export default function Dashboard() {
     clearInterval(pollInterval.current);
   };
 
+  const handleDeletePartnerSessions = async () => {
+    if (!partnerId) return;
+    setDeletingPartner(true);
+    setPartnerResult(null);
+    try {
+      const res = await fetch(`/api/sessions/partner/${partnerId}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      setPartnerResult(data);
+      if (res.ok) {
+        const currentSession = localStorage.getItem('baileys_session');
+        if (currentSession && (currentSession === partnerId || currentSession.startsWith(partnerId + '_') || currentSession.startsWith(partnerId + '-'))) {
+          localStorage.removeItem('baileys_session');
+          setSessionId('');
+          setStatus('disconnected');
+          setQrCode(null);
+          setPhoneInfo(null);
+          clearInterval(pollInterval.current);
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      setPartnerResult({ error: err.message });
+    }
+    setDeletingPartner(false);
+  };
+
   return (
     <div className="flex flex-col items-center max-w-2xl mx-auto w-full space-y-8 mt-10">
       <div className="text-center space-y-3">
@@ -165,6 +196,34 @@ export default function Dashboard() {
                 )}
               </div>
             )}
+          </div>
+        )}
+      </div>
+
+      {/* Delete Partner Sessions Section */}
+      <div className="glass rounded-2xl p-8 w-full shadow-2xl">
+        <h3 className="text-xl font-bold text-white mb-2">Delete Partner Sessions</h3>
+        <p className="text-gray-400 text-sm mb-4">Disconnect and delete all active and stored WhatsApp sessions associated with a specific partner ID prefix.</p>
+        <div className="flex space-x-3">
+          <input 
+            type="text" 
+            value={partnerId}
+            onChange={(e) => setPartnerId(e.target.value)}
+            placeholder="e.g. partner-a"
+            className="flex-1 bg-[#111b21] border border-[#222d34] rounded-xl px-4 py-3 text-white focus:outline-none focus:border-red-500 transition-colors"
+          />
+          <button 
+            onClick={handleDeletePartnerSessions}
+            disabled={!partnerId || deletingPartner}
+            className="bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white px-6 py-3 rounded-xl font-semibold transition-colors flex items-center shadow-[0_0_15px_rgba(239,68,68,0.3)]"
+          >
+            {deletingPartner ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogOut className="w-5 h-5" />}
+            <span className="ml-2">Delete All</span>
+          </button>
+        </div>
+        {partnerResult && (
+          <div className="mt-4 p-4 bg-[#111b21] border border-[#222d34] rounded-xl text-sm font-mono text-emerald-400 overflow-x-auto max-h-40 text-left w-full">
+            <pre>{JSON.stringify(partnerResult, null, 2)}</pre>
           </div>
         )}
       </div>

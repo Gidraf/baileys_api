@@ -52,6 +52,16 @@ const ENDPOINTS = [
         snippets: {
           python: 'import requests\nrequests.delete("https://wabot.gidraf.dev/api/sessions/my-session")'
         }
+      },
+      {
+        title: "Delete Partner Sessions",
+        method: "DELETE",
+        path: "/api/sessions/partner/:partnerId",
+        description: "Disconnects and deletes all active and stored sessions associated with a specific partner ID prefix.",
+        snippets: {
+          python: 'import requests\nrequests.delete("https://wabot.gidraf.dev/api/sessions/partner/partner-a")',
+          javascript: 'fetch("https://wabot.gidraf.dev/api/sessions/partner/partner-a", { method: "DELETE" })'
+        }
       }
     ]
   },

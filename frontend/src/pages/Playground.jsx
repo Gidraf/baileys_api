@@ -468,6 +468,13 @@ const PLAYGROUND_ENDPOINTS = [
     defaultPayload: {
       jid: "2547XXXXXXXX@s.whatsapp.net"
     }
+  },
+  {
+    id: 'delete-partner-sessions',
+    label: 'Delete Partner Sessions',
+    path: 'partner/partner-a',
+    method: 'DELETE',
+    defaultPayload: {}
   }
 ];
 
@@ -555,7 +562,8 @@ export default function Playground() {
     'profile-blocklist-get',
     'profile-name-update',
     'profile-status-update',
-    'resync-app-state'
+    'resync-app-state',
+    'delete-partner-sessions'
   ].includes(activeEndpoint.id);
 
   const getCombinedPayload = () => {
@@ -577,7 +585,9 @@ export default function Playground() {
 
   const getEndpointUrl = () => {
     const relativePath = resolveEndpointPath(activeEndpoint.path);
-    let url = `${window.location.origin}/api/sessions/${sessionId}/${relativePath}`;
+    let url = relativePath.startsWith('partner/')
+      ? `${window.location.origin}/api/sessions/${relativePath}`
+      : `${window.location.origin}/api/sessions/${sessionId}/${relativePath}`;
     if (activeEndpoint.method === 'GET') {
       const payload = getCombinedPayload();
       const params = new URLSearchParams();
@@ -609,7 +619,9 @@ export default function Playground() {
     try {
       const method = activeEndpoint.method || 'POST';
       const relativePath = resolveEndpointPath(activeEndpoint.path);
-      let url = `/api/sessions/${sessionId}/${relativePath}`;
+      let url = relativePath.startsWith('partner/')
+        ? `/api/sessions/${relativePath}`
+        : `/api/sessions/${sessionId}/${relativePath}`;
       const options = {
         method,
         headers: { 'Content-Type': 'application/json' }
