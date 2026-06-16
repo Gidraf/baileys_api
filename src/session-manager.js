@@ -450,6 +450,7 @@ export class SessionManager {
       lockRenewer:  null,
       retries440:   0,
       retries:      0,
+      hasConnectedOnce: false,
       webhookQueue: [],
       webhookProcessing: false,
     }
@@ -610,6 +611,7 @@ export class SessionManager {
             sessionData.pairingCode = null
             sessionData.retries440  = 0
             sessionData.retries     = 0
+            sessionData.hasConnectedOnce = true
             sessionData.phone       = sock.authState.creds.me?.id || phoneNumber || null
             console.log(`[${sessionId}] ✅ Connected as ${sessionData.phone}`)
             sendWebhook('connected', { user: sock.authState.creds.me })
@@ -629,6 +631,24 @@ export class SessionManager {
               sendWebhook('disconnected', { statusCode: code, reason: 'loggedOut' })
               this._cleanup(sessionId)
               // Delete auth state so a fresh QR can be issued next time
+              try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+              return
+            }
+
+            // ── Reset session if it fails repeatedly without ever connecting ─
+            const isNetworkError = lastDisconnect?.error && [
+              'ENOTFOUND',
+              'EAI_AGAIN',
+              'ECONNREFUSED',
+              'ETIMEDOUT',
+              'EHOSTUNREACH',
+              'ECONNRESET'
+            ].includes(lastDisconnect.error.code);
+
+            if (!sessionData.hasConnectedOnce && sessionData.retries > 10 && !isNetworkError) {
+              console.error(`[${sessionId}] Session failed to connect after 10 attempts without opening. Clearing auth state to reset QR code.`)
+              sendWebhook('disconnected', { statusCode: code, reason: 'handshake_loop_reset' })
+              this._cleanup(sessionId)
               try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
               return
             }
