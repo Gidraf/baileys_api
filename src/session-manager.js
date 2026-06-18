@@ -15,6 +15,9 @@ import path from 'path'
 import qrcode from 'qrcode'
 import { createClient } from 'redis'
 import AntiBan, { startPresenceCycling, stopPresenceCycling } from './antiban.js'
+import { SocksProxyAgent } from 'socks-proxy-agent'
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import { getProxy as getWhatsAppProxy } from './proxy-pool.js'
 
 // Lazy-import to break circular dep (webhooks imports session-manager indirectly)
 let _recordWebhookEvent = null
@@ -31,6 +34,28 @@ const REDIS_URL     = process.env.REDIS_URL     || 'redis://redis:6379'
 const INSTANCE_ID   = process.env.INSTANCE_ID   || `worker-${process.pid}`
 const LOCK_TTL_MS   = 30_000   // lock expires after 30 s if not renewed
 const LOCK_RENEW_MS = 10_000   // renew every 10 s
+
+function createProxyAgent(proxyUrl) {
+  const protocol = new URL(proxyUrl).protocol.toLowerCase()
+  if (protocol.startsWith('socks')) {
+    return new SocksProxyAgent(proxyUrl)
+  }
+  if (protocol === 'http:' || protocol === 'https:') {
+    return new HttpsProxyAgent(proxyUrl)
+  }
+  throw new Error(`Unsupported proxy protocol: ${protocol}`)
+}
+
+function resolveSessionProxy(sessionId) {
+  const proxyUrl = getWhatsAppProxy(sessionId)
+  if (!proxyUrl) {
+    throw new Error(`No WhatsApp proxy is available for session '${sessionId}'`)
+  }
+  return {
+    proxyUrl,
+    proxyAgent: createProxyAgent(proxyUrl),
+  }
+}
 
 // ─── Redis client (gracefully disabled if unavailable) ────────────────────────
 let _redis = null
@@ -454,6 +479,10 @@ export class SessionManager {
       webhookQueue: [],
       webhookProcessing: false,
     }
+    const { proxyUrl, proxyAgent } = resolveSessionProxy(sessionId)
+    sessionData.proxyUrl = proxyUrl
+    sessionData.proxyAgent = proxyAgent
+    console.log(`[${sessionId}] Using WhatsApp proxy ${proxyUrl}`)
     this.sessions.set(sessionId, sessionData)
 
     // Keep the lock alive
@@ -503,6 +532,8 @@ export class SessionManager {
         const sock = makeWASocket({
           logger,
           auth:               state,
+          agent:              sessionData.proxyAgent,
+          fetchAgent:         sessionData.proxyAgent,
           printQRInTerminal:  false,
           browser:            ['Ubuntu', 'Chrome', '20.0.04'],
           markOnlineOnConnect: true,

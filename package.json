@@ -12,6 +12,7 @@
     "@hapi/boom": "^10.0.1",
     "@itsliaaa/baileys": "0.3.17",
     "express": "^4.22.2",
+    "https-proxy-agent": "^9.1.0",
     "mime-types": "^3.0.2",
     "multer": "1.4.5-lts.2",
     "node-fetch": "^3.3.2",
@@ -20,6 +21,7 @@
     "qrcode": "^1.5.4",
     "redis": "^4.7.1",
     "sharp": "^0.33.5",
+    "socks-proxy-agent": "^10.1.0",
     "ws": "^8.21.0"
   },
   "engines": {
