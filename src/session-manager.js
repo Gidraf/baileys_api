@@ -548,6 +548,9 @@ export class SessionManager {
         const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
 
+        const proxyInfo = sessionData.proxyUrl ? `via ${sessionData.proxyUrl}` : 'direct (no proxy)'
+        console.log(`[${sessionId}] Creating socket ${proxyInfo}...`)
+
         const sock = makeWASocket({
           logger,
           auth:               state,
@@ -556,6 +559,7 @@ export class SessionManager {
           printQRInTerminal:  false,
           browser:            ['Ubuntu', 'Chrome', '20.0.04'],
           markOnlineOnConnect: true,
+          connectTimeoutMs:   30000,  // 30s timeout for connection establishment
           getMessage: async (key) => {
             if (sessionData.store) {
               const msg = await sessionData.store.loadMessage(key.remoteJid, key.id)
@@ -564,6 +568,22 @@ export class SessionManager {
             return undefined
           }
         })
+
+        // Monitor for connection timeout (socket created but never reaches 'open' state)
+        let connectionTimeoutHandle = null
+        const setConnectionTimeout = () => {
+          if (connectionTimeoutHandle) clearTimeout(connectionTimeoutHandle)
+          connectionTimeoutHandle = setTimeout(() => {
+            if (sessionData.sock === sock && sessionData.status === 'connecting') {
+              console.warn(`[${sessionId}] Connection timeout (60s) in 'connecting' state. ${sessionData.proxyUrl ? 'Proxy may be slow. ' : ''}Closing socket...`)
+              try { sock.end() } catch {}
+            }
+          }, 60000)  // 60s timeout for reaching 'open' state after socket created
+        }
+
+        const clearConnectionTimeout = () => {
+          if (connectionTimeoutHandle) clearTimeout(connectionTimeoutHandle)
+        }
 
         const storePath = path.join(sessionDir, 'baileys_store_multi.json')
         const store = makeInMemoryStore({ logger, socket: sock })
@@ -640,6 +660,7 @@ export class SessionManager {
           if (connection === 'connecting') {
             sessionData.status = 'connecting'
             sendWebhook('connection.update', { connection: 'connecting' })
+            setConnectionTimeout()  // Start monitoring for connection timeout
 
             // Request pairing code if a phone number was provided
             if (phoneNumber && !sock.authState.creds.registered) {
@@ -656,6 +677,7 @@ export class SessionManager {
             }
 
           } else if (connection === 'open') {
+            clearConnectionTimeout()  // Connection succeeded, clear timeout
             sessionData.status      = 'open'
             sessionData.qrDataURL   = null
             sessionData.pairingCode = null
@@ -669,7 +691,7 @@ export class SessionManager {
             startPresenceCycling(sock, sessionId)
 
           } else if (connection === 'close') {
-            const code       = new Boom(lastDisconnect?.error)?.output?.statusCode
+            clearConnectionTimeout()  // Connection closed, clear timeout
             const isLoggedOut = code === DisconnectReason.loggedOut  // 401
             const isConflict  = code === 440
 
@@ -749,6 +771,7 @@ export class SessionManager {
         })
 
       } catch (err) {
+        clearConnectionTimeout()  // Clear timeout on error
         console.error(`[${sessionId}] doConnect error:`, err.message)
         sessionData.status = 'error'
         sendWebhook('error', { message: err.message })
