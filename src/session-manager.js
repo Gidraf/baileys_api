@@ -577,6 +577,13 @@ export class SessionManager {
             if (sessionData.sock === sock && sessionData.status === 'connecting') {
               console.warn(`[${sessionId}] Connection timeout (60s) in 'connecting' state. ${sessionData.proxyUrl ? 'Proxy may be slow. ' : ''}Closing socket...`)
               try { sock.end() } catch {}
+              
+              // If proxy was being used, try fallback to direct connection on next retry
+              if (sessionData.proxyUrl) {
+                console.warn(`[${sessionId}] Proxy connection timeout – will retry without proxy`)
+                sessionData.proxyAgent = null
+                sessionData.proxyUrl = null
+              }
             }
           }, 60000)  // 60s timeout for reaching 'open' state after socket created
         }
@@ -642,7 +649,12 @@ export class SessionManager {
           if (sessionData.sock && sessionData.sock !== sock) {
             return // Ignore events from old sockets to prevent loops
           }
-          const { connection, lastDisconnect, qr } = update
+          const { connection, lastDisconnect, qr, isNewLogin, isChallenge } = update
+          
+          // Log all connection updates for debugging
+          if (connection) {
+            console.log(`[${sessionId}] connection.update: connection=${connection}, isNewLogin=${isNewLogin}, isChallenge=${isChallenge}`)
+          }
 
           // ── QR code ─────────────────────────────────────────────────────
           if (qr) {
