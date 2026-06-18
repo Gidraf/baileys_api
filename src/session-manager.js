@@ -49,11 +49,26 @@ function createProxyAgent(proxyUrl) {
 function resolveSessionProxy(sessionId) {
   const proxyUrl = getWhatsAppProxy(sessionId)
   if (!proxyUrl) {
-    throw new Error(`No WhatsApp proxy is available for session '${sessionId}'`)
+    return {
+      proxyUrl: null,
+      proxyAgent: null,
+      usingProxy: false,
+    }
   }
-  return {
-    proxyUrl,
-    proxyAgent: createProxyAgent(proxyUrl),
+
+  try {
+    return {
+      proxyUrl,
+      proxyAgent: createProxyAgent(proxyUrl),
+      usingProxy: true,
+    }
+  } catch (err) {
+    console.warn(`[${sessionId}] Invalid proxy '${proxyUrl}', falling back to direct connection: ${err.message}`)
+    return {
+      proxyUrl: null,
+      proxyAgent: null,
+      usingProxy: false,
+    }
   }
 }
 
@@ -479,10 +494,14 @@ export class SessionManager {
       webhookQueue: [],
       webhookProcessing: false,
     }
-    const { proxyUrl, proxyAgent } = resolveSessionProxy(sessionId)
+    const { proxyUrl, proxyAgent, usingProxy } = resolveSessionProxy(sessionId)
     sessionData.proxyUrl = proxyUrl
     sessionData.proxyAgent = proxyAgent
-    console.log(`[${sessionId}] Using WhatsApp proxy ${proxyUrl}`)
+    if (usingProxy) {
+      console.log(`[${sessionId}] Using WhatsApp proxy ${proxyUrl}`)
+    } else {
+      console.log(`[${sessionId}] No proxy available, using direct WhatsApp connection (backward compatibility)`)
+    }
     this.sessions.set(sessionId, sessionData)
 
     // Keep the lock alive

@@ -214,13 +214,15 @@ class ProxyPool {
 
   /**
    * Get a proxy URL for a session/partner.
-   * Partners are pinned to a specific peer for session consistency.
-   * Returns null if no proxies available and no static fallback.
+   * If WA_PROXY_URL is set, always use it.
+   * Otherwise, partners are pinned to a random connected peer for session consistency.
+   * Returns null when no proxy is available.
    */
   getProxy(sessionId = null) {
-    if (this._peers.length === 0) {
-      return STATIC_PROXY || null
-    }
+    // Always prefer a fixed proxy when explicitly configured.
+    if (STATIC_PROXY) return STATIC_PROXY
+
+    if (this._peers.length === 0) return null
 
     if (sessionId) {
       if (this._partnerPin.has(sessionId)) {
@@ -229,17 +231,14 @@ class ProxyPool {
           return buildProxyUrl(pinnedIp)
         }
       }
-      // Deterministic pin: hash(sessionId) % poolSize
-      let hash = 0
-      for (let i = 0; i < sessionId.length; i++) hash = (hash * 31 + sessionId.charCodeAt(i)) >>> 0
-      const peer = this._peers[hash % this._peers.length]
+      // Randomize across currently connected peers, then pin per session.
+      const peer = this._peers[Math.floor(Math.random() * this._peers.length)]
       this._partnerPin.set(sessionId, peer.ip)
       return buildProxyUrl(peer.ip)
     }
 
-    // Round-robin (no session specified)
-    const peer = this._peers[this._rrIndex % this._peers.length]
-    this._rrIndex++
+    // Random peer selection when no session ID is provided.
+    const peer = this._peers[Math.floor(Math.random() * this._peers.length)]
     return buildProxyUrl(peer.ip)
   }
 
