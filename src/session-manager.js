@@ -704,6 +704,7 @@ export class SessionManager {
 
           } else if (connection === 'close') {
             clearConnectionTimeout()  // Connection closed, clear timeout
+            const code = lastDisconnect?.error?.output?.statusCode || new Boom(lastDisconnect?.error)?.output?.statusCode;
             const isLoggedOut = code === DisconnectReason.loggedOut  // 401
             const isConflict  = code === 440
 
@@ -727,7 +728,7 @@ export class SessionManager {
               'ETIMEDOUT',
               'EHOSTUNREACH',
               'ECONNRESET'
-            ].includes(lastDisconnect.error.code);
+            ].includes(lastDisconnect?.error?.code);
 
             if (!sessionData.hasConnectedOnce && sessionData.retries > 10 && !isNetworkError) {
               console.error(`[${sessionId}] Session failed to connect after 10 attempts without opening. Clearing auth state to reset QR code.`)
