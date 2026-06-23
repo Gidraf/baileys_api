@@ -569,6 +569,17 @@ export class SessionManager {
           }
         })
 
+        // Wrap profilePictureUrl to prevent unhandled rejection/exceptions from make-in-memory-store or other async callers (e.g. item-not-found 404 Boom error)
+        const originalProfilePictureUrl = sock.profilePictureUrl;
+        sock.profilePictureUrl = async (...args) => {
+          try {
+            return await originalProfilePictureUrl.apply(sock, args);
+          } catch (err) {
+            console.error(`[${sessionId}] Failed to fetch profile picture for ${args[0]}:`, err.message || err);
+            return undefined;
+          }
+        };
+
         // Monitor for connection timeout (socket created but never reaches 'open' state)
         let connectionTimeoutHandle = null
         const setConnectionTimeout = () => {

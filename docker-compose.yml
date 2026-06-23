@@ -104,6 +104,16 @@ services:
       timeout: 5s
       retries: 3
 
+  # ── Autoheal (Automatically restarts unhealthy containers) ────────────────
+  autoheal:
+    image: willfarrell/autoheal:latest
+    container_name: baileys-autoheal
+    restart: unless-stopped
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=all
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
 # ── Named volumes ─────────────────────────────────────────────────────────────
 volumes:
   sessions-data:
