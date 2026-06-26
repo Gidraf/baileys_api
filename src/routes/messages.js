@@ -3,6 +3,7 @@ import multer from 'multer'
 import fs from 'fs'
 import { sanitizeJid, isValidJid } from '../utils/jid.js'
 import { resolveMedia, guessMime } from '../utils/media.js'
+import { checkDedup, reserveDedup, confirmDedup } from '../utils/dedup.js'
 
 // 200 MB limit for campaign video uploads
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200 * 1024 * 1024 } })
@@ -10,8 +11,9 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 200
 export function createMessageRoutes(sm) {
   const router = Router({ mergeParams: true })
 
-  function sock(req) { 
+  function sock(req) {
     const s = sm.getSocket(req.params.sessionId);
+    const sessionId = req.params.sessionId;
     return {
       ...s,
       sendMessage: async (jid, content, options) => {
@@ -24,10 +26,25 @@ export function createMessageRoutes(sm) {
           if (!validDomains.includes(parts[1])) return false;
           return /^[0-9:\-]+$/.test(parts[0]);
         };
-        
+
         if (typeof jid === 'string' && !isValidJid(jid)) {
           console.error(`[API] Blocked sending message to invalid JID: ${jid}`);
           return { error: 'Invalid JID format', blocked: true };
+        }
+
+        // ── Idempotency / dedup check ────────────────────────────────────────
+        // Callers set idempotencyKey in the request body.  If we've already
+        // sent this exact message we return the cached result immediately so
+        // WhatsApp never sees the duplicate.
+        const idempotencyKey = req.body?.idempotencyKey
+        if (idempotencyKey) {
+          const cached = await checkDedup(sessionId, idempotencyKey)
+          if (cached) {
+            console.log(`[Dedup] Returning cached result for key=${idempotencyKey} jid=${jid}`)
+            return { ...cached, duplicate: true }
+          }
+          // Reserve the slot so a concurrent retry doesn't race through
+          await reserveDedup(sessionId, idempotencyKey)
         }
 
         if (jid && typeof jid === 'string' && jid.includes('@s.whatsapp.net')) {
@@ -52,7 +69,15 @@ export function createMessageRoutes(sm) {
             return j;
           }));
         }
-        return s.sendMessage(jid, content, options);
+
+        const result = await s.sendMessage(jid, content, options);
+
+        // ── Persist result so retries are no-ops ─────────────────────────────
+        if (idempotencyKey && result && !result.error && !result.blocked) {
+          await confirmDedup(sessionId, idempotencyKey, result)
+        }
+
+        return result;
       }
     };
   }
