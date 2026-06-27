@@ -385,6 +385,17 @@ export class SessionManager {
       for (const dir of dirs) {
         const p = path.join(SESSIONS_DIR, dir)
         if (!fs.statSync(p).isDirectory()) continue
+
+        // Skip directories with no credentials — they're leftover empty dirs from
+        // a previous logout. Delete them immediately rather than trying to connect
+        // (which would just spin in "not logged in, attempting registration...").
+        const credPath = path.join(p, 'creds.json')
+        if (!fs.existsSync(credPath)) {
+          console.log(`[${dir}] No creds.json found — removing leftover directory`)
+          try { fs.rmSync(p, { recursive: true, force: true }) } catch {}
+          continue
+        }
+
         // Stagger restores so workers don't all race for the same session
         await new Promise(r => setTimeout(r, Math.floor(Math.random() * 2500)))
         console.log(`[${dir}] Attempting auto-restore…`)
@@ -571,19 +582,21 @@ export class SessionManager {
       }
       try {
         sessionData.status = 'connecting'
-        const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
-        const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
+        const logger = pino({ level: process.env.LOG_LEVEL || 'silent' })
 
-        // If there are no credentials AND no phoneNumber was provided, attempting to
-        // connect would just spin in "not logged in, attempting registration..." forever.
-        // Abort cleanly so the user can create a fresh session via the API.
-        if (!state.creds.registered && !phoneNumber) {
+        // Guard BEFORE useMultiFileAuthState so it can't recreate the directory.
+        // Without a phoneNumber there is no way to pair a new device — connecting
+        // would spin forever in "not logged in, attempting registration...".
+        const credPath = path.join(sessionDir, 'creds.json')
+        if (!fs.existsSync(credPath) && !phoneNumber) {
           console.warn(`[${sessionId}] No credentials and no phoneNumber — cannot connect. Delete and recreate this session.`)
           this._cleanup(sessionId)
           try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
           sendWebhook('disconnected', { reason: 'no_credentials' })
           return
         }
+
+        const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
 
         const proxyInfo = sessionData.proxyUrl ? `via ${sessionData.proxyUrl}` : 'direct (no proxy)'
         console.log(`[${sessionId}] Creating socket ${proxyInfo}...`)
