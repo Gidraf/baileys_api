@@ -590,7 +590,11 @@ export class SessionManager {
         const credPath = path.join(sessionDir, 'creds.json')
         if (!fs.existsSync(credPath) && !phoneNumber) {
           console.warn(`[${sessionId}] No credentials and no phoneNumber — cannot connect. Delete and recreate this session.`)
-          this._cleanup(sessionId)
+          // Keep in memory with 'no_credentials' status so future createSession calls
+          // return early (status: 'no_credentials') instead of re-entering the connect loop.
+          // CVPAP's auto-wakeup only triggers on known disconnected states, not 'no_credentials'.
+          sessionData.dead = true
+          sessionData.status = 'no_credentials'
           try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
           sendWebhook('disconnected', { reason: 'no_credentials' })
           return
