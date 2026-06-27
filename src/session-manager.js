@@ -6,6 +6,7 @@ import {
   makeInMemoryStore,
   decryptPollVote,
   jidNormalizedUser,
+  downloadMediaMessage,
 } from '@itsliaaa/baileys'
 import crypto from 'crypto'
 import { Boom } from '@hapi/boom'
@@ -661,11 +662,34 @@ export class SessionManager {
               for (const msg of data.messages) {
                 // Optional: skip messages sent by the bot itself to prevent infinite auto-reply loops
                 if (msg.key.fromMe) continue;
-                
+
                 // Parse messages for custom events (votes, interactive button replies)
                 await parseMessageForWebhooks(msg, store, sendWebhook);
-                
-                sendWebhook('messages.upsert', { ...data, messages: [msg] })
+
+                // Download media eagerly and embed base64 in the webhook payload so
+                // the backend never needs a separate download-media round-trip.
+                const MEDIA_TYPES = ['imageMessage', 'videoMessage', 'audioMessage', 'pttMessage', 'documentMessage', 'stickerMessage']
+                const mediaType = MEDIA_TYPES.find(t => msg.message?.[t])
+                let media = null
+                if (mediaType) {
+                  try {
+                    const buf = await downloadMediaMessage(
+                      msg, 'buffer', {},
+                      { logger: pino({ level: 'silent' }), reuploadRequest: sock.updateMediaMessage }
+                    )
+                    media = {
+                      base64:   buf.toString('base64'),
+                      mimetype: msg.message[mediaType].mimetype || 'application/octet-stream',
+                      caption:  msg.message[mediaType].caption  || '',
+                      type:     mediaType,
+                    }
+                    console.log(`[${sessionId}] Downloaded ${mediaType} (${buf.length} bytes) for msg ${msg.key.id}`)
+                  } catch (err) {
+                    console.warn(`[${sessionId}] Media download failed for ${msg.key.id}: ${err.message}`)
+                  }
+                }
+
+                sendWebhook('messages.upsert', { ...data, messages: [msg], media })
               }
             } else {
               sendWebhook(event, data)
