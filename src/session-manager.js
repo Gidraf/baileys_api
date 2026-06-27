@@ -9,6 +9,7 @@ import {
   downloadMediaMessage,
 } from '@itsliaaa/baileys'
 import crypto from 'crypto'
+import os from 'os'
 import { Boom } from '@hapi/boom'
 import pino from 'pino'
 import fs from 'fs'
@@ -32,7 +33,13 @@ async function getRecordWebhookEvent() {
 
 const SESSIONS_DIR  = process.env.SESSIONS_DIR  || './sessions'
 const REDIS_URL     = process.env.REDIS_URL     || 'redis://redis:6379'
-const INSTANCE_ID   = process.env.INSTANCE_ID   || `worker-${process.pid}`
+// Detect unresolved Docker Swarm template variables (e.g. INSTANCE_ID={{.Task.Slot}}).
+// When Swarm templates aren't substituted all replicas get the same literal string,
+// causing every replica to think it owns the Redis lock → duplicate sessions.
+const _rawInstanceId = process.env.INSTANCE_ID || ''
+const INSTANCE_ID = (_rawInstanceId && !_rawInstanceId.includes('{{'))
+  ? _rawInstanceId
+  : `${os.hostname()}-${process.pid}`
 const LOCK_TTL_MS   = 30_000   // lock expires after 30 s if not renewed
 const LOCK_RENEW_MS = 10_000   // renew every 10 s
 
@@ -566,6 +573,17 @@ export class SessionManager {
         sessionData.status = 'connecting'
         const logger               = pino({ level: process.env.LOG_LEVEL || 'silent' })
         const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
+
+        // If there are no credentials AND no phoneNumber was provided, attempting to
+        // connect would just spin in "not logged in, attempting registration..." forever.
+        // Abort cleanly so the user can create a fresh session via the API.
+        if (!state.creds.registered && !phoneNumber) {
+          console.warn(`[${sessionId}] No credentials and no phoneNumber — cannot connect. Delete and recreate this session.`)
+          this._cleanup(sessionId)
+          try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+          sendWebhook('disconnected', { reason: 'no_credentials' })
+          return
+        }
 
         const proxyInfo = sessionData.proxyUrl ? `via ${sessionData.proxyUrl}` : 'direct (no proxy)'
         console.log(`[${sessionId}] Creating socket ${proxyInfo}...`)
