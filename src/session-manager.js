@@ -417,11 +417,21 @@ export class SessionManager {
 
   getSocket(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s) throw new Error(`Session '${sessionId}' not found`)
-    if (s.status !== 'open')
-      throw new Error(`Session '${sessionId}' is not connected (status: ${s?.status}). Please try again when it is 'open'.`)
-    if (!s.sock)
-      throw new Error(`Session '${sessionId}' is initializing (no socket yet)`)
+    if (!s) {
+      const err = new Error(`Session '${sessionId}' not found`)
+      err.status = 404
+      throw err
+    }
+    if (s.status !== 'open') {
+      const err = new Error(`Session '${sessionId}' is not connected (status: ${s?.status}). Please try again when it is 'open'.`)
+      err.status = 503
+      throw err
+    }
+    if (!s.sock) {
+      const err = new Error(`Session '${sessionId}' is initializing (no socket yet)`)
+      err.status = 503
+      throw err
+    }
     return s.sock
   }
 
@@ -432,8 +442,16 @@ export class SessionManager {
 
   getStore(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s) throw new Error(`Session '${sessionId}' not found`)
-    if (!s.store) throw new Error(`Session '${sessionId}' store not fully initialized yet.`)
+    if (!s) {
+      const err = new Error(`Session '${sessionId}' not found`)
+      err.status = 404
+      throw err
+    }
+    if (!s.store) {
+      const err = new Error(`Session '${sessionId}' store not fully initialized yet.`)
+      err.status = 503
+      throw err
+    }
     return s.store
   }
 

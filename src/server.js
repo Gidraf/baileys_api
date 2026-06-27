@@ -146,8 +146,16 @@ app.get('*', (req, res) => {
 
 // ─── Global error handler ─────────────────────────────────────────────────────
 app.use((err, _req, res, _next) => {
-  console.error(err)
-  res.status(500).json({ error: err.message || 'Internal server error' })
+  const status = err.status || err.statusCode || 500
+  // Only log unexpected server errors with a full stack trace.
+  // 404 (session not found) and 503 (session not ready) are expected operational
+  // states — log them as a single-line warning to avoid log spam.
+  if (status >= 500) {
+    console.error(err)
+  } else {
+    console.warn(`[${status}] ${err.message}`)
+  }
+  res.status(status).json({ error: err.message || 'Internal server error' })
 })
 
 app.listen(PORT, () => {
