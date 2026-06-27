@@ -884,11 +884,15 @@ export class SessionManager {
 
   async removeSession(sessionId) {
     const s = this.sessions.get(sessionId)
-    if (!s) return
-    if (s.sock) { try { await s.sock.logout() } catch {} }
-    this._cleanup(sessionId)
+    if (s) {
+      if (s.sock) { try { await s.sock.logout() } catch {} }
+      this._cleanup(sessionId)
+    }
+    // Always delete the session directory, even when the session is not in memory
+    // (e.g. after a 401 logout the session is removed from memory but files remain on disk).
     const sessionDir = path.join(SESSIONS_DIR, sessionId)
     try { fs.rmSync(sessionDir, { recursive: true, force: true }) } catch {}
+    await releaseLock(sessionId)
   }
 
   async removePartnerSessions(partnerId) {
