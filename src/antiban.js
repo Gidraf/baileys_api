@@ -90,10 +90,10 @@ export const DEFAULT_CONFIG = {
   /** Hard daily cap — refuse sends above this */
   dailyHardLimit: 350,
   /** How long (ms) to show typing indicator before a short message */
-  typingMinMs: 800,
-  typingMaxMs: 3500,
-  /** Extra typing time per 100 chars */
-  typingPerCharMs: 25,
+  typingMinMs: 1500,
+  typingMaxMs: 15000,
+  /** Extra typing time per character (80ms/char ~120 WPM) */
+  typingPerCharMs: 80,
   /** Base delay between messages (seconds) by content length bucket */
   delays: {
     veryLong: { minChars: 500, minSec:  6, maxSec: 10 },  // 500+ chars

@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
-    "@itsliaaa/baileys": "0.3.17",
+    "@itsliaaa/baileys": "0.3.18-final",
     "express": "^4.22.2",
     "https-proxy-agent": "^9.1.0",
     "mime-types": "^3.0.2",

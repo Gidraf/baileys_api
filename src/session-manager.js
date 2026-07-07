@@ -634,6 +634,59 @@ export class SessionManager {
           }
         };
 
+        // Helper to extract text from message content for antiban delays
+        const extractText = (content) => {
+          if (!content) return ''
+          if (typeof content === 'string') return content
+          if (content.text) return content.text
+          if (content.caption) return content.caption
+          return ''
+        }
+
+        // Queue-based sequential sendMessage wrapper to prevent WhatsApp rate-limit bans
+        const originalSendMessage = sock.sendMessage
+        const messageQueue = []
+        let processingQueue = false
+
+        const processQueue = async () => {
+          if (processingQueue) return
+          processingQueue = true
+
+          while (messageQueue.length > 0) {
+            const { jid, content, options, resolve, reject } = messageQueue.shift()
+            try {
+              const text = extractText(content)
+              const isStatus = jid === 'status@broadcast'
+              const isReaction = content && typeof content === 'object' && ('react' in content || 'pin' in content || 'delete' in content || 'keep' in content)
+
+              if (!isStatus && !isReaction) {
+                console.log(`[AntiBan:${sessionId}] Enforcing guard before sending message to ${jid}`)
+                await AntiBan.guard(sessionId, jid, text, sock)
+              }
+
+              const result = await originalSendMessage.apply(sock, [jid, content, options])
+
+              if (!isStatus && !isReaction && result && !result.error && !result.blocked) {
+                await AntiBan.after(sessionId)
+              }
+
+              resolve(result)
+            } catch (err) {
+              console.error(`[Queue:${sessionId}] Error sending message to ${jid}:`, err.message || err)
+              reject(err)
+            }
+          }
+
+          processingQueue = false
+        }
+
+        sock.sendMessage = (jid, content, options) => {
+          return new Promise((resolve, reject) => {
+            messageQueue.push({ jid, content, options, resolve, reject })
+            processQueue()
+          })
+        }
+
         // Monitor for connection timeout (socket created but never reaches 'open' state)
         let connectionTimeoutHandle = null
         const setConnectionTimeout = () => {
