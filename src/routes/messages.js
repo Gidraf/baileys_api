@@ -107,6 +107,27 @@ export function createMessageRoutes(sm) {
   
   router.use(validateJid);
 
+  // ── List chats (read-only, from the store) ──────────────────────────────────
+  // Every chat this session knows (history sync on link + live), newest first. The backend uses it to
+  // find old chats nobody answered (CVPAP winback). Must stay above '/:jid'.
+  router.get('/chats', (req, res) => {
+    try {
+      const st = store(req)
+      const all = st.chats && typeof st.chats.all === 'function' ? st.chats.all() : []
+      const ts = (v) => Number(v && typeof v === 'object' ? (v.low ?? 0) : (v || 0))
+      const chats = all
+        .map(c => ({
+          id: c.id,
+          name: c.name || null,
+          conversationTimestamp: ts(c.conversationTimestamp),
+          unreadCount: c.unreadCount || 0,
+          messages: st.messages[c.id] ? st.messages[c.id].array.length : 0,
+        }))
+        .sort((a, b) => b.conversationTimestamp - a.conversationTimestamp)
+      res.json({ chats })
+    } catch (e) { res.status(500).json({ error: e.message }) }
+  })
+
   // ── Fetch Messages ──────────────────────────────────────────────────────────
   router.get('/:jid', (req, res) => {
     try {
